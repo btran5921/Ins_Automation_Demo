@@ -1,0 +1,28 @@
+{
+  "name": "ins_automation_demo",
+  "version": "1.0.0",
+  "description": "This project is a **safe Instagram automation demo** designed to practice backend development, queues, rate limiting, scheduling, logging, and API design.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/btran5921/Ins_Automation_Demo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/btran5921/Ins_Automation_Demo/issues"
+  },
+  "homepage": "https://github.com/btran5921/Ins_Automation_Demo#readme",
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
