@@ -1,0 +1,22 @@
+# docker-compose.yml
+#
+# FILE PURPOSE:
+# Spin up a local MongoDB for development with `docker compose up -d`.
+# The data volume keeps your actions across restarts.
+#
+# You do NOT need Docker to run this project — you can install MongoDB
+# natively, or point MONGODB_URI at an Atlas cluster. This is just the
+# easiest way to get a local instance running.
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: instagram-demo-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:

@@ -27,7 +27,9 @@ function getConfig() {
 }
 
 /**
- * Update delay bounds. Throws if input is invalid.
+ * Update delay bounds. Throws if input is invalid. Changes are
+ * applied atomically: if any validation fails, `config` is left
+ * completely untouched.
  *
  * @param {object} [opts]
  * @param {number} [opts.minDelayMs]
@@ -35,12 +37,16 @@ function getConfig() {
  * @returns {object} the new config
  */
 function updateConfig({ minDelayMs, maxDelayMs } = {}) {
+  // Work on a copy first, so we don't leave config in a bad state
+  // if validation fails partway through.
+  const next = { ...config };
+
   if (minDelayMs !== undefined) {
     const v = Number(minDelayMs);
     if (!Number.isFinite(v) || v < 0) {
       throw new Error("minDelayMs must be a number >= 0");
     }
-    config.minDelayMs = v;
+    next.minDelayMs = v;
   }
 
   if (maxDelayMs !== undefined) {
@@ -48,14 +54,16 @@ function updateConfig({ minDelayMs, maxDelayMs } = {}) {
     if (!Number.isFinite(v) || v < 0) {
       throw new Error("maxDelayMs must be a number >= 0");
     }
-    config.maxDelayMs = v;
+    next.maxDelayMs = v;
   }
 
-  // Sanity check: max must be >= min
-  if (config.maxDelayMs < config.minDelayMs) {
+  // Cross-field check on the candidate object, not the live one.
+  if (next.maxDelayMs < next.minDelayMs) {
     throw new Error("maxDelayMs must be >= minDelayMs");
   }
 
+  // All valid — commit atomically.
+  Object.assign(config, next);
   return getConfig();
 }
 

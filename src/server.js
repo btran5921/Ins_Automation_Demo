@@ -1,36 +1,75 @@
 // src/server.js
 //
 // FILE PURPOSE:
-// The entry point of the app. Creates the Express server, mounts
-// middleware, registers routes, and starts listening on a port.
+// Entry point. Boot order matters here:
+//   1. Load environment (.env)
+//   2. Connect to MongoDB
+//   3. Hydrate the queue with pending actions from Mongo
+//   4. Start listening
 //
-// Right now only /api/health exists. As you add routes for actions,
-// accounts, queue, logs, and config, they get mounted here.
+// If any of those fail, we log clearly and exit. Better than silently
+// running with a broken database connection.
+
+require("dotenv").config();
 
 const express = require("express");
+const path = require("path");
+
+const { connect } = require("./db/connect");
 const logger = require("./utils/logger");
+const actionRoutes = require("./routes/actionRoutes");
+const accountRoutes = require("./routes/accountRoutes");
+const systemRoutes = require("./routes/systemRoutes");
+const queue = require("./services/actionQueue");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+const MONGODB_URI =
+  process.env.MONGODB_URI || "mongodb://localhost:27017/instagram_demo";
 
 // ---------- Middleware ----------
-// Parse JSON request bodies so req.body works in controllers.
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "..", "public")));
 
-// ---------- Routes ----------
-app.get("/", (req, res) => {
-  res.json({ message: "Instagram Automation Demo API" });
-});
-
+// ---------- API routes ----------
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", uptime: process.uptime() });
 });
 
-// ---------- Start server ----------
-app.listen(PORT, () => {
-  logger.log(`Server running on http://localhost:${PORT}`);
-  logger.log("Mock Instagram API only — no real requests will be made.");
+app.use("/api/actions", actionRoutes);
+app.use("/api/accounts", accountRoutes);
+app.use("/api", systemRoutes);
+
+// ---------- 404 for unknown API routes ----------
+app.use("/api", (req, res) => {
+  res.status(404).json({
+    error: `Route not found: ${req.method} ${req.originalUrl}`
+  });
 });
 
-module.exports = app;
+// ---------- Central error handler ----------
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  logger.log(`Unhandled error: ${err.message}`, "error");
+  res.status(500).json({ error: "Internal server error" });
+});
 
+// ---------- Boot ----------
+async function main() {
+  try {
+    await connect(MONGODB_URI);
+    await queue.hydrate();
+
+    app.listen(PORT, () => {
+      logger.log(`Server running on http://localhost:${PORT}`);
+      logger.log("Mock Instagram API only — no real requests will be made.");
+    });
+  } catch (error) {
+    logger.log(`Startup failed: ${error.message}`, "error");
+    process.exit(1);
+  }
+}
+
+main();
+
+module.exports = app;

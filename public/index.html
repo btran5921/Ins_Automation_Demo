@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<!--
+  public/index.html
+  FILE PURPOSE:
+  The dashboard layout. A single page with:
+    - Header with a queue running/paused indicator and toggle button
+    - Stats cards (total, pending, processing, completed, failed, etc.)
+    - Left column: form to add actions + settings panel
+    - Right column: actions table + activity log
+  All data is fetched by public/app.js. This file just lays out the
+  elements that app.js will fill in.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Instagram Automation Demo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div>
+        <h1>Instagram Automation Demo</h1>
+        <p class="subtitle">
+          Mock API only &mdash; nothing is sent to Instagram.
+        </p>
+      </div>
+      <!-- Filled by app.js with the running indicator + toggle button. -->
+      <div id="queue-toggle" class="queue-toggle"></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Stats cards. Filled by app.js from GET /api/actions/stats. -->
+    <section class="cards" id="stats"></section>
+
+    <div class="grid">
+      <!-- ---------------- Left column ---------------- -->
+      <div class="column">
+
+        <!-- Form to create a new action (POST /api/actions). -->
+        <section class="panel">
+          <h2>Add action</h2>
+          <form id="action-form">
+            <div class="field">
+              <label for="type">Type</label>
+              <select id="type" name="type">
+                <option value="LIKE">LIKE</option>
+                <option value="FOLLOW">FOLLOW</option>
+                <option value="COMMENT">COMMENT</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="target">Target</label>
+              <input
+                id="target"
+                name="target"
+                type="text"
+                placeholder="post_123 or @example_user"
+                autocomplete="off"
+                required
+              />
+            </div>
+
+            <!-- Only shown when Type is COMMENT. Toggled in app.js. -->
+            <div class="field" id="text-field" hidden>
+              <label for="text">Comment text</label>
+              <input
+                id="text"
+                name="text"
+                type="text"
+                placeholder="Nice post!"
+                autocomplete="off"
+              />
+            </div>
+
+            <div class="field-row">
+              <button type="submit" class="btn primary">Add to queue</button>
+              <button type="button" class="btn" id="demo-btn">
+                Add 5 demo actions
+              </button>
+            </div>
+
+            <!-- Small inline feedback for form submits. -->
+            <p class="form-message" id="form-message"></p>
+          </form>
+        </section>
+
+        <!-- Settings panel (PUT /api/config). -->
+        <section class="panel">
+          <h2>Settings</h2>
+
+          <div class="field">
+            <label for="min-delay">
+              Min delay between actions:
+              <span class="mono" id="min-delay-value">2000</span> ms
+            </label>
+            <input id="min-delay" type="range" min="0" max="10000" step="250" value="2000" />
+          </div>
+
+          <div class="field">
+            <label for="max-delay">
+              Max delay between actions:
+              <span class="mono" id="max-delay-value">4000</span> ms
+            </label>
+            <input id="max-delay" type="range" min="0" max="10000" step="250" value="4000" />
+          </div>
+
+          <div class="field">
+            <label for="failure-rate">
+              Mock failure rate:
+              <span class="mono" id="failure-rate-value">10</span>%
+            </label>
+            <input id="failure-rate" type="range" min="0" max="100" step="1" value="10" />
+          </div>
+
+          <button class="btn primary" id="save-config">Save settings</button>
+        </section>
+
+      </div>
+
+      <!-- ---------------- Right column ---------------- -->
+      <div class="column">
+
+        <!-- Actions table (GET /api/actions). -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Actions</h2>
+            <div class="filters">
+              <select id="filter-status">
+                <option value="">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="processing">Processing</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <select id="filter-type">
+                <option value="">All types</option>
+                <option value="LIKE">LIKE</option>
+                <option value="FOLLOW">FOLLOW</option>
+                <option value="COMMENT">COMMENT</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Type</th>
+                  <th>Target</th>
+                  <th>Status</th>
+                  <th>Attempts</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="actions-body">
+                <tr><td colspan="6" class="empty">No actions yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Activity log (GET /api/logs). -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Activity log</h2>
+            <button class="btn small" id="clear-logs">Clear</button>
+          </div>
+          <div class="logs" id="logs"></div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

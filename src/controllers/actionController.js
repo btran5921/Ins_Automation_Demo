@@ -1,50 +1,22 @@
 // src/controllers/actionController.js
 //
 // FILE PURPOSE:
-// Contains the business logic for action-related endpoints. A controller
-// sits between routes (which define URLs) and services (which do work).
-//
-// The controller is responsible for:
-//   1. Validating incoming request bodies
-//   2. Building action objects with the right shape
-//   3. Pushing them into the shared actions array
-//   4. Handing them to the queue for processing
-//   5. Returning JSON responses
-//
-// It does NOT talk to Instagram (that's instagramMock's job) and it
-// does NOT process the queue (that's actionQueue's job).
+// Business logic for action endpoints. With MongoDB, every handler is
+// async and talks to actionStore instead of an in-memory array.
 
-const { actions, nextActionId } = require("../data/actions");
+const actionStore = require("../services/actionStore");
 const queue = require("../services/actionQueue");
 const logger = require("../utils/logger");
 
-// Only these three action types are accepted by the API.
 const VALID_TYPES = ["LIKE", "FOLLOW", "COMMENT"];
-
-// Default number of times an action may be attempted before it's
-// marked as permanently failed. Callers can override via the request.
 const DEFAULT_MAX_ATTEMPTS = 3;
 
-// ---------------------------------------------------------------
-// Validation
-// ---------------------------------------------------------------
-
 /**
- * Validate an incoming action payload. Returns the cleaned-up values
- * plus an array of error strings (empty if everything is OK).
- *
- * Rules:
- *   - type must be present and one of VALID_TYPES
- *   - target must be a non-empty string
- *   - COMMENT actions must include a non-empty `text`
- *
- * @param {object} body - raw request body
- * @returns {{ errors: string[], type: string, target: string, text: string|null }}
+ * Validate an incoming action payload. Same rules as before.
  */
 function validate(body) {
   const errors = [];
 
-  // Normalize: trim strings, uppercase the type, default text to null.
   const type =
     typeof body.type === "string" ? body.type.trim().toUpperCase() : "";
   const target =
@@ -69,15 +41,8 @@ function validate(body) {
   return { errors, type, target, text };
 }
 
-// ---------------------------------------------------------------
-// Handlers
-// ---------------------------------------------------------------
-
-/**
- * POST /api/actions
- * Create a new action, validate it, store it, and enqueue it.
- */
-function createAction(req, res, next) {
+/* ---------------- POST /api/actions ---------------- */
+async function createAction(req, res, next) {
   try {
     const body = req.body || {};
     const { errors, type, target, text } = validate(body);
@@ -89,7 +54,6 @@ function createAction(req, res, next) {
       });
     }
 
-    // Optional per-request override of the retry limit.
     let maxAttempts = DEFAULT_MAX_ATTEMPTS;
     if (body.maxAttempts !== undefined) {
       const n = Number(body.maxAttempts);
@@ -101,10 +65,12 @@ function createAction(req, res, next) {
       maxAttempts = n;
     }
 
-    // Build the action object. This is the shape stored everywhere.
-    const action = {
-      id: nextActionId(),
-      accountId: body.accountId || null,  // reserved for later
+    // Generate a sequential, human-readable id, then insert.
+    const id = await actionStore.nextActionId();
+
+    const action = await actionStore.create({
+      _id: id,
+      accountId: body.accountId || null,
       type,
       target,
       text: type === "COMMENT" ? text : null,
@@ -112,132 +78,102 @@ function createAction(req, res, next) {
       attempts: 0,
       maxAttempts,
       error: null,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
       startedAt: null,
       completedAt: null
-    };
+    });
 
-    actions.push(action);
     logger.log(`Action ${action.id} created: ${action.type} ${action.target}`);
 
-    // Hand it to the queue. If the queue is running, it will start
-    // processing immediately.
+    // Hand the live document to the queue. It will persist state changes.
     queue.enqueue(action);
 
     res.status(201).json(action);
   } catch (error) {
-    // Anything unexpected: hand off to the central error handler.
     next(error);
   }
 }
 
-/**
- * GET /api/actions
- * Return all actions, newest first. Supports optional query filters:
- *   ?status=pending
- *   ?type=LIKE
- *   ?accountId=account_1
- */
-function listActions(req, res) {
-  const { status, type, accountId } = req.query;
+/* ---------------- GET /api/actions ---------------- */
+async function listActions(req, res, next) {
+  try {
+    const filters = {};
+    if (req.query.status) {
+      filters.status = String(req.query.status).toLowerCase();
+    }
+    if (req.query.type) {
+      filters.type = String(req.query.type).toUpperCase();
+    }
+    if (req.query.accountId) {
+      filters.accountId = String(req.query.accountId);
+    }
 
-  let result = actions;
-
-  if (status) {
-    result = result.filter((a) => a.status === String(status).toLowerCase());
+    const result = await actionStore.findAll(filters);
+    res.json(result);
+  } catch (error) {
+    next(error);
   }
-  if (type) {
-    result = result.filter((a) => a.type === String(type).toUpperCase());
-  }
-  if (accountId) {
-    result = result.filter((a) => a.accountId === accountId);
-  }
-
-  // Newest first so the dashboard shows recent activity at the top.
-  res.json([...result].reverse());
 }
 
-/**
- * GET /api/actions/stats
- * Return counts by status and by type, plus a queue snapshot.
- * This is what the dashboard cards are built from.
- */
-function getStats(req, res) {
-  const byStatus = {
-    pending: 0,
-    processing: 0,
-    completed: 0,
-    failed: 0,
-    cancelled: 0
-  };
-  const byType = { LIKE: 0, FOLLOW: 0, COMMENT: 0 };
+/* ---------------- GET /api/actions/stats ---------------- */
+async function getStats(req, res, next) {
+  try {
+    const { total, byStatus, byType } = await actionStore.getStats();
 
-  for (const action of actions) {
-    byStatus[action.status] = (byStatus[action.status] || 0) + 1;
-    byType[action.type] = (byType[action.type] || 0) + 1;
-  }
-
-  // Rough retry count: attempts beyond the first "successful" one.
-  const totalRetries = actions.reduce(
-    (sum, a) =>
-      sum + Math.max(0, a.attempts - (a.status === "completed" ? 1 : 0)),
-    0
-  );
-
-  res.json({
-    total: actions.length,
-    byStatus,
-    byType,
-    totalRetries,
-    queue: queue.getState()
-  });
-}
-
-/**
- * GET /api/actions/:id
- * Return a single action by id, or 404 if not found.
- */
-function getAction(req, res) {
-  const action = actions.find((a) => a.id === req.params.id);
-
-  if (!action) {
-    return res.status(404).json({ error: "Action not found" });
-  }
-
-  res.json(action);
-}
-
-/**
- * DELETE /api/actions/:id
- * Cancel a pending action. Completed/failed/processing actions are
- * kept in the history and cannot be cancelled.
- */
-function cancelAction(req, res) {
-  const action = actions.find((a) => a.id === req.params.id);
-
-  if (!action) {
-    return res.status(404).json({ error: "Action not found" });
-  }
-
-  if (action.status === "cancelled") {
-    return res.status(409).json({ error: "Action is already cancelled" });
-  }
-
-  if (action.status !== "pending") {
-    return res.status(409).json({
-      error: `Only pending actions can be cancelled (current status: "${action.status}")`
+    res.json({
+      total,
+      byStatus,
+      byType,
+      queue: queue.getState()
     });
+  } catch (error) {
+    next(error);
   }
+}
 
-  action.status = "cancelled";
-  action.completedAt = new Date().toISOString();
+/* ---------------- GET /api/actions/:id ---------------- */
+async function getAction(req, res, next) {
+  try {
+    const action = await actionStore.findById(req.params.id);
+    if (!action) {
+      return res.status(404).json({ error: "Action not found" });
+    }
+    res.json(action);
+  } catch (error) {
+    next(error);
+  }
+}
 
-  // Take it out of the queue in case it's still waiting there.
-  queue.remove(action.id);
+/* ---------------- DELETE /api/actions/:id ---------------- */
+async function cancelAction(req, res, next) {
+  try {
+    const action = await actionStore.findById(req.params.id);
 
-  logger.log(`Action ${action.id} cancelled by user`, "warn");
+    if (!action) {
+      return res.status(404).json({ error: "Action not found" });
+    }
 
-  res.json(action);
+    if (action.status === "cancelled") {
+      return res.status(409).json({ error: "Action is already cancelled" });
+    }
+
+    if (action.status !== "pending") {
+      return res.status(409).json({
+        error: `Only pending actions can be cancelled (current status: "${action.status}")`
+      });
+    }
+
+    action.status = "cancelled";
+    action.completedAt = new Date();
+    await actionStore.persist(action);
+
+    queue.remove(action.id);
+    logger.log(`Action ${action.id} cancelled by user`, "warn");
+
+    res.json(action);
+  } catch (error) {
+    next(error);
+  }
 }
 
 module.exports = {

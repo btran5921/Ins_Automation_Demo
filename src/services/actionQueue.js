@@ -1,47 +1,41 @@
 // src/services/actionQueue.js
 //
 // FILE PURPOSE:
-// This is the heart of the project. It takes actions that were pushed
-// into the queue and processes them one at a time, in order, with a
-// delay between each one. It also handles retries when the mock API
-// fails.
+// The queue takes actions and processes them one at a time, in order,
+// with a delay between each one and automatic retries on failure.
 //
-// Flow for each action:
-//
-//   pending → processing → completed
-//                       ↘ (on error) → pending (retry) → ... → failed
-//
-// Only ONE action runs at a time. That's the entire point of a queue:
-// it gives the app control over order and speed.
+// With MongoDB in the picture, the queue is still the source of truth
+// for the WORKING SET (the actions currently pending in memory), but
+// every state change is also persisted to Mongo via actionStore.persist.
+// That means restarting the server doesn't lose work: hydrate() re-queues
+// whatever was still pending.
 //
 // PUBLIC API:
-//   enqueue(action)  - add an action to the back of the queue
+//   enqueue(action)  - add an action doc to the back of the queue
 //   remove(id)       - take an action out of the queue (used on cancel)
-//   start()          - begin / resume processing
-//   stop()           - pause after the current action finishes
+//   start() / stop() - control processing
 //   getState()       - snapshot for the dashboard
+//   hydrate()        - load pending actions from Mongo at startup
 
-const { actions } = require("../data/actions");
+const Action = require("../models/Action");
 const instagramMock = require("./instagramMock");
 const rateLimiter = require("./rateLimiter");
+const actionStore = require("./actionStore");
 const logger = require("../utils/logger");
 
 // ---------------------------------------------------------------
 // Module state
 // ---------------------------------------------------------------
 
-// IDs of actions waiting to be processed, in FIFO order.
-// We store IDs (not the action objects) so that whenever we look up
-// an action we always see its latest version.
+// Action documents waiting to be processed, in FIFO order.
+// Each entry is a Mongoose document so we can mutate + save it.
 const waiting = [];
 
-// Whether the queue is allowed to process. `start()` sets this true,
-// `stop()` sets it false. Starts as `true` so anything enqueued right
-// away gets processed without needing an explicit start.
+// Whether the queue is allowed to process. Starts as `true` so actions
+// enqueued right after server startup get processed immediately.
 let running = true;
 
-// True while the processing loop is alive. Prevents starting a second
-// loop and accidentally processing two actions at once.
+// True while the processing loop is alive.
 let processing = false;
 
 // The ID of the action currently being processed (or null).
@@ -50,47 +44,32 @@ let currentActionId = null;
 // How many actions have finished processing (completed or failed).
 let processedCount = 0;
 
-/**
- * Look up an action in the shared actions array by ID.
- */
-function findAction(id) {
-  return actions.find((a) => a.id === id);
-}
-
 // ---------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------
 
 /**
- * Add an action to the back of the queue. If the queue is running,
- * immediately kick off processing.
- *
- * @param {object} action - an action object (from the controller)
+ * Add an action document to the back of the queue. If the queue is
+ * running, kick off processing.
  */
 function enqueue(action) {
-  waiting.push(action.id);
+  waiting.push(action);
   logger.log(`Action ${action.id} queued (${waiting.length} waiting)`);
   if (running) kick();
 }
 
 /**
- * Remove an action from the waiting list. Only affects actions that
- * haven't started processing yet. Used when the user cancels a
- * pending action.
- *
- * @param {string} id
+ * Remove an action from the waiting list. Used when the user cancels
+ * a pending action. Only affects actions that haven't started yet.
  */
 function remove(id) {
-  const index = waiting.indexOf(id);
+  const index = waiting.findIndex((a) => a.id === id);
   if (index !== -1) {
     waiting.splice(index, 1);
     logger.log(`Action ${id} removed from queue`);
   }
 }
 
-/**
- * Start or resume processing.
- */
 function start() {
   if (running) return;
   running = true;
@@ -98,111 +77,113 @@ function start() {
   kick();
 }
 
-/**
- * Pause the queue. The current action (if any) finishes normally;
- * only new actions are held back.
- */
 function stop() {
   if (!running) return;
   running = false;
   logger.log("Queue stopped (will pause after the current action)", "warn");
 }
 
-/**
- * Return a snapshot of queue state for the dashboard.
- */
 function getState() {
   return {
     running,
     processing,
     currentActionId,
     waiting: waiting.length,
-    waitingIds: [...waiting],
+    waitingIds: waiting.map((a) => a.id),
     processedCount
   };
+}
+
+/**
+ * Called once at server startup, after connecting to MongoDB.
+ *
+ * Steps:
+ *   1. Recover any actions that were "processing" when the server
+ *      stopped — reset them to "pending" so they get retried.
+ *   2. Load all pending actions from Mongo and enqueue them.
+ *
+ * Safe to call more than once; later calls just re-hydrate.
+ */
+async function hydrate() {
+  const recovered = await actionStore.recoverInterrupted();
+  if (recovered > 0) {
+    logger.log(`Recovered ${recovered} interrupted action(s)`, "warn");
+  }
+
+  const pending = await actionStore.findPending();
+
+  // Avoid duplicating actions that are already in the waiting list
+  // (in case hydrate is called while the queue is alive).
+  const alreadyWaiting = new Set(waiting.map((a) => a.id));
+  let added = 0;
+  for (const action of pending) {
+    if (!alreadyWaiting.has(action.id)) {
+      waiting.push(action);
+      added += 1;
+    }
+  }
+
+  if (added > 0) {
+    logger.log(`Hydrated ${added} pending action(s) from MongoDB`);
+    if (running) kick();
+  }
 }
 
 // ---------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------
 
-/**
- * Make sure a processing loop is running.
- * If one is already alive, do nothing.
- */
 function kick() {
   if (processing) return;
   loop().catch((error) => {
-    // A crash here would leave the queue stuck, so log loudly.
     logger.log(`Queue loop crashed: ${error.message}`, "error");
   });
 }
 
-/**
- * The main loop. Pops one action at a time, processes it, waits a
- * bit via the rate limiter, then goes again. Exits when the queue
- * is empty or `running` becomes false.
- */
 async function loop() {
   if (processing) return;
   processing = true;
 
   try {
     while (running && waiting.length > 0) {
-      // Peek at the next ID without removing it yet.
-      const id = waiting[0];
-      const action = findAction(id);
+      const action = waiting[0];
 
-      // Safety: if the action vanished or isn't pending anymore
-      // (e.g. it was cancelled), drop it from the queue and move on.
+      // Skip actions that were cancelled or otherwise no longer pending.
       if (!action || action.status !== "pending") {
         waiting.shift();
         continue;
       }
 
-      // Now actually remove it from the waiting list.
       waiting.shift();
-      currentActionId = id;
+      currentActionId = action.id;
 
       await processAction(action);
 
       currentActionId = null;
       processedCount += 1;
 
-      // Rate limit between actions, but only if there's more work.
       if (waiting.length > 0 && running) {
         const delay = await rateLimiter.waitBeforeNextAction();
         logger.log(`Rate limiter: waiting ${Math.round(delay)}ms before next action`);
       }
     }
   } finally {
-    // Whatever happened, we're no longer processing.
     processing = false;
     currentActionId = null;
   }
 }
 
-/**
- * Process a single action by calling the right mock API method.
- * Handles status transitions and retry logic.
- *
- * Status transitions:
- *   pending → processing → completed      (success)
- *   pending → processing → pending        (retry scheduled)
- *   pending → processing → failed         (out of attempts)
- *
- * @param {object} action
- */
 async function processAction(action) {
+  // ---- transition to processing ----
   action.status = "processing";
-  action.startedAt = new Date().toISOString();
+  action.startedAt = new Date();
+  await actionStore.persist(action);
+
   logger.log(`Action ${action.id} started: ${action.type} ${action.target}`);
 
   try {
     let result;
 
-    // Dispatch based on action type. This is the only place that
-    // knows how "action types" map onto mock API calls.
     if (action.type === "FOLLOW") {
       result = await instagramMock.follow(action.target);
     } else if (action.type === "LIKE") {
@@ -210,35 +191,35 @@ async function processAction(action) {
     } else if (action.type === "COMMENT") {
       result = await instagramMock.comment(action.target, action.text);
     } else {
-      // Shouldn't happen because the controller validates types,
-      // but this turns a logic bug into a failed action instead of
-      // a silent no-op.
       throw new Error(`Unsupported action type: ${action.type}`);
     }
 
+    // ---- success ----
     action.status = "completed";
     action.error = null;
-    action.completedAt = new Date().toISOString();
-    logger.log(`Action ${action.id} completed: ${action.type} ${action.target}`);
+    action.completedAt = new Date();
+    await actionStore.persist(action);
 
+    logger.log(`Action ${action.id} completed: ${action.type} ${action.target}`);
     return result;
   } catch (error) {
     action.attempts += 1;
     action.error = error.message;
 
     if (action.attempts < action.maxAttempts) {
-      // Still have attempts left: put it back in the queue.
+      // Retry: back of the line, and persist the updated attempts.
       action.status = "pending";
-      waiting.push(action.id); // back of the line, not front
+      await actionStore.persist(action);
+      waiting.push(action);
       logger.log(
         `Action ${action.id} failed (attempt ${action.attempts}/${action.maxAttempts}): ` +
           `${error.message} — re-queued`,
         "warn"
       );
     } else {
-      // Out of attempts: mark as permanently failed.
       action.status = "failed";
-      action.completedAt = new Date().toISOString();
+      action.completedAt = new Date();
+      await actionStore.persist(action);
       logger.log(
         `Action ${action.id} FAILED permanently after ${action.attempts} attempt(s): ${error.message}`,
         "error"
@@ -249,4 +230,4 @@ async function processAction(action) {
   }
 }
 
-module.exports = { enqueue, remove, start, stop, getState };
+module.exports = { enqueue, remove, start, stop, getState, hydrate };
