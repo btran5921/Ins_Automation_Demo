@@ -19,6 +19,7 @@ const { connect } = require("./db/connect");
 const logger = require("./utils/logger");
 const actionRoutes = require("./routes/actionRoutes");
 const accountRoutes = require("./routes/accountRoutes");
+const candidateRoutes = require("./routes/candidateRoutes");
 const systemRoutes = require("./routes/systemRoutes");
 const queue = require("./services/actionQueue");
 
@@ -27,34 +28,30 @@ const PORT = process.env.PORT || 3000;
 const MONGODB_URI =
   process.env.MONGODB_URI || "mongodb://localhost:27017/instagram_demo";
 
-// ---------- Middleware ----------
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "..", "public")));
 
-// ---------- API routes ----------
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", uptime: process.uptime() });
 });
 
 app.use("/api/actions", actionRoutes);
 app.use("/api/accounts", accountRoutes);
+app.use("/api/candidates", candidateRoutes);
 app.use("/api", systemRoutes);
 
-// ---------- 404 for unknown API routes ----------
 app.use("/api", (req, res) => {
   res.status(404).json({
     error: `Route not found: ${req.method} ${req.originalUrl}`
   });
 });
 
-// ---------- Central error handler ----------
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   logger.log(`Unhandled error: ${err.message}`, "error");
   res.status(500).json({ error: "Internal server error" });
 });
 
-// ---------- Boot ----------
 async function main() {
   try {
     await connect(MONGODB_URI);
@@ -62,7 +59,12 @@ async function main() {
 
     app.listen(PORT, () => {
       logger.log(`Server running on http://localhost:${PORT}`);
-      logger.log("Mock Instagram API only — no real requests will be made.");
+      if (!process.env.ANTHROPIC_API_KEY) {
+        logger.log(
+          "ANTHROPIC_API_KEY not set — AI suggestions will be disabled",
+          "warn"
+        );
+      }
     });
   } catch (error) {
     logger.log(`Startup failed: ${error.message}`, "error");

@@ -2,180 +2,307 @@
 <!--
   public/index.html
   FILE PURPOSE:
-  The dashboard layout. A single page with:
-    - Header with a queue running/paused indicator and toggle button
-    - Stats cards (total, pending, processing, completed, failed, etc.)
-    - Left column: form to add actions + settings panel
-    - Right column: actions table + activity log
-  All data is fetched by public/app.js. This file just lays out the
-  elements that app.js will fill in.
+  Layout for the dashboard, themed after Instagram. Three tabs:
+    1. Candidates — the manual-assist workflow (main tool)
+    2. Demo       — the mock queue, stats, and activity log
+    3. Settings   — rate limiter + mock API config
+
+  Element IDs and data attributes match public/app.js exactly, so
+  no JS changes are needed when restyling this file.
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Instagram Automation Demo</title>
+  <meta name="color-scheme" content="dark" />
+  <title>Engagement Helper</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
+  <!-- Toast notifications stack here. app.js appends children. -->
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <!-- ======================= Header ======================= -->
+  <header class="app-header">
     <div class="header-inner">
-      <div>
-        <h1>Instagram Automation Demo</h1>
-        <p class="subtitle">
-          Mock API only &mdash; nothing is sent to Instagram.
-        </p>
+      <div class="brand">
+        <!-- Gradient story-ring around the brand mark, IG style -->
+        <div class="brand-ring">
+          <div class="brand-mark" aria-hidden="true">
+            <!-- Minimal camera glyph, like Instagram's icon -->
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
+                 stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="6" width="18" height="14" rx="4" />
+              <circle cx="12" cy="13" r="3.5" />
+              <circle cx="17.5" cy="9" r="0.8" fill="currentColor" stroke="none" />
+            </svg>
+          </div>
+        </div>
+        <div class="brand-text">
+          <h1>Engagement Helper</h1>
+          <p class="subtitle">Manual-assist for your own Instagram</p>
+        </div>
       </div>
-      <!-- Filled by app.js with the running indicator + toggle button. -->
-      <div id="queue-toggle" class="queue-toggle"></div>
+
+      <!-- Live status pills -->
+      <div class="status-row">
+        <div id="provider-pill" class="pill" title="Comment suggestion source">
+          <span class="dot gray"></span>
+          <span class="pill-label">suggestions</span>
+        </div>
+        <div id="queue-pill" class="pill" title="Background action queue">
+          <span class="dot gray"></span>
+          <span class="pill-label">queue</span>
+        </div>
+      </div>
     </div>
   </header>
 
+  <!-- ======================= Tabs ======================= -->
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="candidates" role="tab">
+      Candidates
+      <span class="tab-count" id="tab-count-candidates">0</span>
+    </button>
+    <button class="tab" data-tab="demo" role="tab">Demo</button>
+    <button class="tab" data-tab="settings" role="tab">Settings</button>
+  </nav>
+
   <main>
-    <!-- Stats cards. Filled by app.js from GET /api/actions/stats. -->
-    <section class="cards" id="stats"></section>
 
-    <div class="grid">
-      <!-- ---------------- Left column ---------------- -->
-      <div class="column">
+    <!-- ============================================================
+         TAB: CANDIDATES
+         ============================================================ -->
+    <section data-panel="candidates">
 
-        <!-- Form to create a new action (POST /api/actions). -->
-        <section class="panel">
-          <h2>Add action</h2>
-          <form id="action-form">
+      <!-- Collapsible "Add candidate" panel. Auto-opens on ⌘K. -->
+      <div class="panel add-panel" id="add-panel">
+        <button class="add-panel-toggle" id="add-toggle" aria-expanded="false">
+          <span class="add-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                 stroke="currentColor" stroke-width="2.4"
+                 stroke-linecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </span>
+          <span>Add a post to work on</span>
+          <span class="chev" aria-hidden="true">▾</span>
+        </button>
+
+        <form id="candidate-form" class="add-panel-body" hidden>
+          <div class="field-row">
             <div class="field">
-              <label for="type">Type</label>
-              <select id="type" name="type">
-                <option value="LIKE">LIKE</option>
-                <option value="FOLLOW">FOLLOW</option>
-                <option value="COMMENT">COMMENT</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <label for="target">Target</label>
+              <label for="cand-url">
+                Post URL <span class="hint">optional</span>
+              </label>
               <input
-                id="target"
-                name="target"
+                id="cand-url"
                 type="text"
-                placeholder="post_123 or @example_user"
-                autocomplete="off"
-                required
-              />
-            </div>
-
-            <!-- Only shown when Type is COMMENT. Toggled in app.js. -->
-            <div class="field" id="text-field" hidden>
-              <label for="text">Comment text</label>
-              <input
-                id="text"
-                name="text"
-                type="text"
-                placeholder="Nice post!"
+                placeholder="https://instagram.com/p/…"
                 autocomplete="off"
               />
             </div>
-
-            <div class="field-row">
-              <button type="submit" class="btn primary">Add to queue</button>
-              <button type="button" class="btn" id="demo-btn">
-                Add 5 demo actions
-              </button>
+            <div class="field">
+              <label for="cand-author">
+                Author <span class="hint">optional</span>
+              </label>
+              <input
+                id="cand-author"
+                type="text"
+                placeholder="@username"
+                autocomplete="off"
+              />
             </div>
-
-            <!-- Small inline feedback for form submits. -->
-            <p class="form-message" id="form-message"></p>
-          </form>
-        </section>
-
-        <!-- Settings panel (PUT /api/config). -->
-        <section class="panel">
-          <h2>Settings</h2>
-
-          <div class="field">
-            <label for="min-delay">
-              Min delay between actions:
-              <span class="mono" id="min-delay-value">2000</span> ms
-            </label>
-            <input id="min-delay" type="range" min="0" max="10000" step="250" value="2000" />
           </div>
 
           <div class="field">
-            <label for="max-delay">
-              Max delay between actions:
-              <span class="mono" id="max-delay-value">4000</span> ms
+            <label for="cand-caption">
+              Caption or note
+              <span class="hint" id="cand-caption-hint">0 chars</span>
             </label>
-            <input id="max-delay" type="range" min="0" max="10000" step="250" value="4000" />
+            <textarea
+              id="cand-caption"
+              placeholder="Paste the post's caption, or just describe what it's about…"
+              rows="3"
+            ></textarea>
           </div>
 
-          <div class="field">
-            <label for="failure-rate">
-              Mock failure rate:
-              <span class="mono" id="failure-rate-value">10</span>%
-            </label>
-            <input id="failure-rate" type="range" min="0" max="100" step="1" value="10" />
+          <div class="add-panel-actions">
+            <button type="button" class="btn ghost" id="add-cancel">Cancel</button>
+            <button type="submit" class="btn primary" id="add-submit">
+              Add candidate
+            </button>
           </div>
-
-          <button class="btn primary" id="save-config">Save settings</button>
-        </section>
-
+        </form>
       </div>
 
-      <!-- ---------------- Right column ---------------- -->
-      <div class="column">
+      <!-- Status filter chips -->
+      <div class="chips" id="cand-chips">
+        <button class="chip active" data-status="">All</button>
+        <button class="chip" data-status="new">New</button>
+        <button class="chip" data-status="ready">Ready</button>
+        <button class="chip" data-status="acted">Acted</button>
+        <button class="chip" data-status="skipped">Skipped</button>
+      </div>
 
-        <!-- Actions table (GET /api/actions). -->
-        <section class="panel">
-          <div class="panel-header">
-            <h2>Actions</h2>
-            <div class="filters">
-              <select id="filter-status">
-                <option value="">All statuses</option>
-                <option value="pending">Pending</option>
-                <option value="processing">Processing</option>
-                <option value="completed">Completed</option>
-                <option value="failed">Failed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-              <select id="filter-type">
-                <option value="">All types</option>
-                <option value="LIKE">LIKE</option>
-                <option value="FOLLOW">FOLLOW</option>
-                <option value="COMMENT">COMMENT</option>
-              </select>
-            </div>
-          </div>
+      <!-- Candidate cards render here -->
+      <div id="candidates-list" class="candidates-list"></div>
+    </section>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Type</th>
-                  <th>Target</th>
-                  <th>Status</th>
-                  <th>Attempts</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="actions-body">
-                <tr><td colspan="6" class="empty">No actions yet.</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+    <!-- ============================================================
+         TAB: DEMO
+         ============================================================ -->
+    <section data-panel="demo" hidden>
 
-        <!-- Activity log (GET /api/logs). -->
-        <section class="panel">
-          <div class="panel-header">
+      <div class="cards" id="stats"></div>
+
+      <div class="grid">
+        <div class="column">
+          <section class="panel">
+            <h2>Add demo action</h2>
+            <form id="action-form">
+              <div class="field">
+                <label for="type">Type</label>
+                <select id="type" name="type">
+                  <option value="LIKE">LIKE</option>
+                  <option value="FOLLOW">FOLLOW</option>
+                  <option value="COMMENT">COMMENT</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="target">Target</label>
+                <input
+                  id="target"
+                  name="target"
+                  type="text"
+                  placeholder="post_123 or @example_user"
+                  autocomplete="off"
+                  required
+                />
+              </div>
+
+              <div class="field" id="text-field" hidden>
+                <label for="text">Comment text</label>
+                <input
+                  id="text"
+                  name="text"
+                  type="text"
+                  placeholder="Nice post!"
+                  autocomplete="off"
+                />
+              </div>
+
+              <div class="field-row">
+                <button type="submit" class="btn primary">Add to queue</button>
+                <button type="button" class="btn" id="demo-btn">
+                  Add 5 demo actions
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel">
             <h2>Activity log</h2>
-            <button class="btn small" id="clear-logs">Clear</button>
-          </div>
-          <div class="logs" id="logs"></div>
-        </section>
+            <div class="logs" id="logs"></div>
+            <div class="panel-footer">
+              <button class="btn small" id="clear-logs">Clear logs</button>
+            </div>
+          </section>
+        </div>
 
+        <div class="column">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Actions</h2>
+              <div class="filters">
+                <select id="filter-status">
+                  <option value="">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="processing">Processing</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <select id="filter-type">
+                  <option value="">All types</option>
+                  <option value="LIKE">LIKE</option>
+                  <option value="FOLLOW">FOLLOW</option>
+                  <option value="COMMENT">COMMENT</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Target</th>
+                    <th>Status</th>
+                    <th>Attempts</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="actions-body">
+                  <tr><td colspan="6" class="empty">No actions yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </div>
-    </div>
+    </section>
+
+    <!-- ============================================================
+         TAB: SETTINGS
+         ============================================================ -->
+    <section data-panel="settings" hidden>
+      <section class="panel">
+        <h2>Rate limiter</h2>
+        <p class="muted">
+          How long the queue waits between demo actions. Doesn't affect candidates.
+        </p>
+
+        <div class="field">
+          <label for="min-delay">
+            Min delay: <span class="mono" id="min-delay-value">2000</span> ms
+          </label>
+          <input id="min-delay" type="range" min="0" max="10000"
+                 step="250" value="2000" />
+        </div>
+
+        <div class="field">
+          <label for="max-delay">
+            Max delay: <span class="mono" id="max-delay-value">4000</span> ms
+          </label>
+          <input id="max-delay" type="range" min="0" max="10000"
+                 step="250" value="4000" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Mock Instagram API</h2>
+        <p class="muted">
+          Only affects demo actions. Higher failure rates exercise the retry system.
+        </p>
+
+        <div class="field">
+          <label for="failure-rate">
+            Failure rate: <span class="mono" id="failure-rate-value">10</span>%
+          </label>
+          <input id="failure-rate" type="range" min="0" max="100"
+                 step="1" value="10" />
+        </div>
+      </section>
+
+      <div class="settings-actions">
+        <button class="btn primary" id="save-config">Save settings</button>
+      </div>
+    </section>
+
   </main>
 
   <script src="app.js"></script>

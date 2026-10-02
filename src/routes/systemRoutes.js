@@ -15,6 +15,7 @@ const queue = require("../services/actionQueue");
 const rateLimiter = require("../services/rateLimiter");
 const instagramMock = require("../services/instagramMock");
 const logger = require("../utils/logger");
+const aiSuggest = require("../services/aiSuggest");
 
 const router = express.Router();
 
@@ -62,13 +63,11 @@ router.delete("/logs", (req, res) => {
 
 /* ---------------- Config ---------------- */
 
-// GET /api/config
-// Returns the current rate limiter and mock API settings so the
-// dashboard can display them.
 router.get("/config", (req, res) => {
   res.json({
     rateLimiter: rateLimiter.getConfig(),
-    instagramMock: instagramMock.getConfig()
+    instagramMock: instagramMock.getConfig(),
+    provider: aiSuggest.getProviderName()
   });
 });
 
