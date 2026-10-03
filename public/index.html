@@ -80,7 +80,8 @@
 
   <!-- ======================= Tabs ======================= -->
   <nav class="tabs" role="tablist">
-    <button class="tab active" data-tab="candidates" role="tab">
+    <button class="tab active" data-tab="overview" role="tab">Overview</button>
+    <button class="tab" data-tab="candidates" role="tab">
       Candidates
       <span class="tab-count" id="tab-count-candidates">0</span>
     </button>
@@ -90,10 +91,40 @@
 
   <main>
 
+    <!-- TAB: OVERVIEW - read-only summary built from the same state as the other tabs -->
+    <section data-panel="overview">
+      <div class="ov-kpis" id="ov-kpis"></div>
+
+      <div class="ov-grid">
+        <section class="panel">
+          <h2>Candidate pipeline</h2>
+          <div id="ov-pipeline"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Queue by action</h2>
+          <div id="ov-mix"></div>
+        </section>
+
+        <section class="panel ov-wide">
+          <div class="panel-header">
+            <h2>Ready to act on</h2>
+            <button class="btn small ghost" id="ov-view-ready">Open in Candidates</button>
+          </div>
+          <div id="ov-next"></div>
+        </section>
+
+        <section class="panel ov-wide">
+          <h2>Latest activity</h2>
+          <div class="logs ov-logs" id="ov-logs"></div>
+        </section>
+      </div>
+    </section>
+
     <!-- ============================================================
          TAB: CANDIDATES
          ============================================================ -->
-    <section data-panel="candidates">
+    <section data-panel="candidates" hidden>
 
       <!-- Collapsible "Add candidate" panel. Auto-opens on ⌘K. -->
       <div class="panel add-panel" id="add-panel">

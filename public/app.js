@@ -25,7 +25,8 @@ const state = {
   stats: null,
   queue: null,
   logs: [],
-  provider: "unknown"
+  provider: "unknown",
+  ready: []
 };
 
 const API = "/api";
@@ -162,25 +163,28 @@ let candidatesSig = "";
 
 async function loadCandidates() {
   try {
-    const [list, counts] = await Promise.all([
+    const [list, counts, ready] = await Promise.all([
       api(state.candidateFilter
         ? `/candidates?status=${encodeURIComponent(state.candidateFilter)}`
         : "/candidates"),
-      api("/candidates/counts")
+      api("/candidates/counts"),
+      api("/candidates?status=ready")   // feeds the Overview tab
     ]);
 
     state.candidates = list;
     state.candidateCounts = counts;
+    state.ready = ready;
 
     // Skip the re-render if nothing changed. Otherwise every poll
     // would rebuild the DOM and replay the card animation, which
     // feels like the page is constantly refreshing.
-    const newSig = sig({ list, counts });
+    const newSig = sig({ list, counts, ready });
     if (newSig === candidatesSig) return;
     candidatesSig = newSig;
 
     renderCandidates();
     renderCandidateCounts();
+    renderOverview();
   } catch (err) {
     console.error("loadCandidates failed:", err);
   }
@@ -208,6 +212,7 @@ async function loadActions() {
     renderStats();
     renderQueuePill();
     renderActions();
+    renderOverview();
   } catch (err) {
     console.error("loadActions failed:", err);
   }
@@ -225,6 +230,7 @@ async function loadLogs() {
     logsSig = newSig;
 
     renderLogs();
+    renderOverview();
   } catch (err) {
     console.error("loadLogs failed:", err);
   }
@@ -892,6 +898,93 @@ function openMediaEditor(candidateId) {
   document.addEventListener("keydown", onEsc);
 }
 
+// ============ 8b. Overview ============
+
+const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
+
+/** Jump to the Candidates tab with a status filter applied. */
+function showCandidates(status) {
+  switchTab("candidates");
+  const chip = document.querySelector(`#cand-chips .chip[data-status="${status}"]`);
+  if (chip) chip.click();
+}
+
+function renderOverview() {
+  if (!$("ov-kpis")) return;
+  const c = state.candidateCounts;
+  const n = { new: c.new || 0, ready: c.ready || 0, acted: c.acted || 0, skipped: c.skipped || 0 };
+  const total = n.new + n.ready + n.acted + n.skipped;
+  const by = (state.stats && state.stats.byStatus) || {};
+  const done = by.completed || 0, failed = by.failed || 0;
+  const waiting = state.queue ? state.queue.waiting : 0;
+
+  // --- KPIs ---
+  const kpis = [
+    { label: "Candidates", value: total, sub: `${n.new} new` },
+    { label: "Ready to act on", value: n.ready, sub: n.ready ? "waiting for you" : "all caught up", cls: "hot" },
+    { label: "Acted on", value: n.acted, sub: `${pct(n.acted, n.acted + n.skipped)}% of reviewed` },
+    { label: "Queue success", value: done + failed ? pct(done, done + failed) + "%" : "–",
+      sub: `${waiting} waiting` }
+  ];
+  $("ov-kpis").innerHTML = kpis.map((k) => `
+    <div class="ov-kpi">
+      <div class="k-label">${k.label}</div>
+      <div class="k-value ${k.cls || ""}">${k.value}</div>
+      <div class="k-sub">${k.sub}</div>
+    </div>`).join("");
+
+  // --- Pipeline bar ---
+  const stages = [["new", "New"], ["ready", "Ready"], ["acted", "Acted"], ["skipped", "Skipped"]];
+  $("ov-pipeline").innerHTML = total === 0
+    ? `<p class="muted">No candidates yet. Press <span class="kbd">⌘</span> <span class="kbd">K</span> to add one.</p>`
+    : `<div class="pipeline">${stages.filter(([k]) => n[k] > 0).map(([k, l]) =>
+          `<span class="seg seg-${k}" style="flex-grow:${n[k]}" title="${l}: ${n[k]}"></span>`).join("")}</div>
+       <div class="pipeline-legend">${stages.map(([k, l]) =>
+          `<button class="legend-item" data-go="${k}"><i class="swatch seg-${k}"></i>${l} <b>${n[k]}</b></button>`).join("")}</div>`;
+
+  // --- Queue by action type ---
+  const counts = { LIKE: 0, FOLLOW: 0, COMMENT: 0 };
+  state.actions.forEach((a) => { if (a.type in counts) counts[a.type]++; });
+  const max = Math.max(1, ...Object.values(counts));
+  $("ov-mix").innerHTML = state.actions.length === 0
+    ? `<p class="muted">No queued actions. Add some on the Demo tab.</p>`
+    : Object.entries(counts).map(([t, v]) => `
+        <div class="mix-row">
+          <span class="type-tag ${t}">${t}</span>
+          <div class="mix-track"><div class="mix-bar ${t}" style="width:${(v / max) * 100}%"></div></div>
+          <span class="mono">${v}</span>
+        </div>`).join("");
+
+  // --- Ready list ---
+  const ready = state.ready.slice(0, 4);
+  $("ov-next").innerHTML = ready.length === 0
+    ? `<p class="muted">Nothing is ready. Open a New candidate and generate comment suggestions.</p>`
+    : ready.map((r) => `
+        <div class="next-row" data-go="ready">
+          <div class="next-main">
+            <div class="next-title">${esc(r.author || "Unknown author")}${r.chosenComment ? ' <span class="next-picked">comment picked</span>' : ""}</div>
+            <div class="next-sub">${esc((r.caption || r.sourceUrl || "").slice(0, 110))}</div>
+          </div>
+          <span class="id-cell">${timeAgo(r.createdAt)}</span>
+        </div>`).join("");
+
+  // --- Latest logs ---
+  $("ov-logs").innerHTML = state.logs.length === 0
+    ? `<div class="log-line"><span class="log-msg">No activity yet.</span></div>`
+    : state.logs.slice(0, 6).map((l) => `
+        <div class="log-line ${esc(l.level)}">
+          <span class="log-time">${timeOnly(l.createdAt)}</span>
+          <span class="log-msg">${esc(l.message)}</span>
+        </div>`).join("");
+}
+
+// One delegated handler for every "jump to Candidates" control on the Overview.
+document.querySelector('[data-panel="overview"]').addEventListener("click", (e) => {
+  const go = e.target.closest("[data-go]");
+  if (go) showCandidates(go.dataset.go);
+});
+$("ov-view-ready").addEventListener("click", () => showCandidates("ready"));
+
 // ============ 9. Boot ============
 
 document.addEventListener("keydown", (e) => {
@@ -902,7 +995,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-const savedTab = localStorage.getItem("activeTab") || "candidates";
+const savedTab = localStorage.getItem("activeTab") || "overview";
 switchTab(savedTab);
 
 loadCandidates();
