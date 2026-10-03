@@ -93,4 +93,21 @@ router.put("/config", (req, res) => {
   }
 });
 
+const postMetadata = require("../services/postMetadata");
+
+router.get("/debug/embed", async (req, res, next) => {
+  try {
+    const url = req.query.url;
+    if (!url) return res.status(400).json({ error: "url query param required" });
+    const result = await postMetadata.fetchRawEmbed(url);
+    res.type("text/plain").send(
+      `<!-- status: ${result.status} -->\n` +
+      `<!-- embedUrl: ${result.embedUrl} -->\n\n` +
+      result.html
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

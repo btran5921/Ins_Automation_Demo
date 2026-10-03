@@ -1,32 +1,80 @@
 /*
   public/style.css
   FILE PURPOSE:
-  Instagram-inspired design system. Dark theme by default, with the
-  signature IG gradient used for primary actions and accents.
+  Instagram-inspired design system with light and dark themes.
+  Default follows the OS via prefers-color-scheme; the header toggle
+  overrides with a data-theme attribute on <html>.
 
-  IG reference palette:
-    gradient: #f09433 → #e6683c → #dc2743 → #cc2366 → #bc1888
-    heart:    #ed4956
-    dark bg:  #000000
-    card bg:  #121212
-    border:   #262626
-    text:     #f5f5f5
-    muted:    #a8a8a8
+  IG reference palette (light):
+    bg:     #ffffff
+    card:   #ffffff
+    border: #dbdbdb
+    text:   #262626
+    muted:  #737373
+    blue:   #0095f6
 
-  Structure:
-    1. Tokens
-    2. Reset & base
-    3. Layout primitives
-    4. Components (panels, buttons, chips, badges, cards)
-    5. Header, tabs, toasts
-    6. Candidate cards (with media + music overlay)
-    7. Actions table + logs
-    8. Modal
-    9. Responsive
+  IG reference palette (dark):
+    bg:     #000000
+    card:   #121212
+    border: #262626
+    text:   #f5f5f5
+    muted:  #a8a8a8
+
+  Both themes share the IG gradient and heart red.
 */
 
 /* ============ 1. Tokens ============ */
-:root {
+
+/* Light theme — default when OS says light, or forced via data-theme="light" */
+:root,
+:root[data-theme="light"] {
+  --bg:          #ffffff;
+  --surface:     #ffffff;
+  --surface-2:   #fafafa;
+  --surface-3:   #f0f0f0;
+
+  --border:        #dbdbdb;
+  --border-strong: #c7c7c7;
+
+  --text:       #262626;
+  --text-muted: #737373;
+  --text-dim:   #a8a8a8;
+
+  --hover-row:  rgba(0, 0, 0, 0.03);
+  --log-bg:     #fafafa;
+  --shadow-lg:  0 12px 40px rgba(0, 0, 0, 0.12);
+  --header-bg:  rgba(255, 255, 255, 0.85);
+  --brand-mark-bg: #ffffff;
+  --placeholder-tint: rgba(220, 39, 67, 0.04);
+  --empty-tint:       rgba(188, 24, 136, 0.03);
+
+  /* Shared brand tokens — same in both themes */
+  --ig-gradient: linear-gradient(
+    45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%
+  );
+  --ig-blue:   #0095f6;
+  --ig-heart:  #ed4956;
+  --green:     #22c55e;
+  --green-soft: rgba(34, 197, 94, 0.12);
+  --amber:     #f59e0b;
+  --amber-soft: rgba(245, 158, 11, 0.12);
+  --red:       #ed4956;
+  --red-soft:  rgba(237, 73, 86, 0.1);
+  --purple:    #bc1888;
+  --purple-soft: rgba(188, 24, 136, 0.1);
+  --pink:      #dc2743;
+  --pink-soft: rgba(220, 39, 67, 0.1);
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Dark theme — default when OS says dark, or forced via data-theme="dark" */
+:root[data-theme="dark"] {
   --bg:          #000000;
   --surface:     #121212;
   --surface-2:   #1a1a1a;
@@ -39,43 +87,42 @@
   --text-muted: #a8a8a8;
   --text-dim:   #737373;
 
-  /* Instagram brand gradient */
-  --ig-gradient: linear-gradient(
-    45deg,
-    #f09433 0%,
-    #e6683c 25%,
-    #dc2743 50%,
-    #cc2366 75%,
-    #bc1888 100%
-  );
+  --hover-row:  rgba(255, 255, 255, 0.02);
+  --log-bg:     #0a0a0a;
+  --shadow-lg:  0 12px 40px rgba(0, 0, 0, 0.7);
+  --header-bg:  rgba(0, 0, 0, 0.85);
+  --brand-mark-bg: #000000;
+  --placeholder-tint: rgba(220, 39, 67, 0.06);
+  --empty-tint:       rgba(188, 24, 136, 0.05);
+}
 
-  --ig-blue:   #0095f6;
-  --ig-blue-h: #1877f2;
-  --ig-heart:  #ed4956;
-  --green:     #22c55e;
-  --green-soft: rgba(34, 197, 94, 0.14);
-  --amber:     #f59e0b;
-  --amber-soft: rgba(245, 158, 11, 0.14);
-  --red:       #ed4956;
-  --red-soft:  rgba(237, 73, 86, 0.14);
-  --purple:    #bc1888;
-  --purple-soft: rgba(188, 24, 136, 0.14);
-  --pink:      #dc2743;
-  --pink-soft: rgba(220, 39, 67, 0.14);
+/* OS preference — only applies when the user hasn't forced a theme */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg:          #000000;
+    --surface:     #121212;
+    --surface-2:   #1a1a1a;
+    --surface-3:   #262626;
 
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
-  --r-pill: 999px;
+    --border:        #262626;
+    --border-strong: #363636;
 
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.7);
+    --text:       #f5f5f5;
+    --text-muted: #a8a8a8;
+    --text-dim:   #737373;
 
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+    --hover-row:  rgba(255, 255, 255, 0.02);
+    --log-bg:     #0a0a0a;
+    --shadow-lg:  0 12px 40px rgba(0, 0, 0, 0.7);
+    --header-bg:  rgba(0, 0, 0, 0.85);
+    --brand-mark-bg: #000000;
+    --placeholder-tint: rgba(220, 39, 67, 0.06);
+    --empty-tint:       rgba(188, 24, 136, 0.05);
+  }
 }
 
 /* ============ 2. Reset & base ============ */
 * { box-sizing: border-box; }
-
 html, body { margin: 0; padding: 0; }
 
 body {
@@ -87,6 +134,7 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
 }
 
 h1, h2, h3 { margin: 0; font-weight: 600; }
@@ -157,11 +205,7 @@ label {
   font-weight: 500;
 }
 
-label .hint {
-  color: var(--text-dim);
-  font-weight: 400;
-  margin-left: 4px;
-}
+label .hint { color: var(--text-dim); font-weight: 400; margin-left: 4px; }
 
 input[type="text"],
 textarea,
@@ -188,18 +232,13 @@ input[type="text"]:focus,
 textarea:focus,
 select:focus {
   border-color: var(--ig-blue);
-  background: var(--surface-3);
+  background: var(--surface);
 }
 
-input[type="range"] {
-  width: 100%;
-  accent-color: var(--pink);
-  cursor: pointer;
-}
+input[type="range"] { width: 100%; accent-color: var(--pink); cursor: pointer; }
 
 /* ============ 4. Components ============ */
 
-/* Panels */
 .panel {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -245,14 +284,10 @@ input[type="range"] {
   white-space: nowrap;
 }
 
-.btn:hover:not(:disabled) {
-  background: var(--surface-3);
-  border-color: #484848;
-}
+.btn:hover:not(:disabled) { background: var(--surface-2); border-color: var(--text-dim); }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Primary — Instagram gradient */
 .btn.primary {
   background: var(--ig-gradient);
   border: none;
@@ -262,7 +297,6 @@ input[type="range"] {
 }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
 
-/* Ghost — text-only */
 .btn.ghost {
   background: transparent;
   border-color: transparent;
@@ -274,7 +308,6 @@ input[type="range"] {
   border-color: transparent;
 }
 
-/* Danger — subtle red */
 .btn.danger {
   background: transparent;
   border-color: transparent;
@@ -309,19 +342,18 @@ input[type="range"] {
   transition: all 0.12s var(--ease);
 }
 
-.chip:hover { color: var(--text); border-color: #484848; }
+.chip:hover { color: var(--text); border-color: var(--text-dim); }
 
 .chip.active {
-  background: transparent;
-  border: 1px solid transparent;
-  /* Gradient border technique: white inner, gradient outer */
+  /* Gradient border trick: inner fill matches the page bg, outer is the gradient */
   background:
     linear-gradient(var(--bg), var(--bg)) padding-box,
     var(--ig-gradient) border-box;
+  border: 1px solid transparent;
   color: var(--text);
 }
 
-/* Badges & pills */
+/* Badges */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -334,16 +366,38 @@ input[type="range"] {
   letter-spacing: 0.05em;
 }
 
-.badge.new      { background: var(--purple-soft); color: #e56bc1; }
-.badge.ready    { background: var(--pink-soft); color: #ff7b8f; }
-.badge.acted    { background: var(--green-soft); color: #4ade80; }
-.badge.skipped  { background: rgba(115, 115, 115, 0.2); color: var(--text-muted); }
+.badge.new      { background: var(--purple-soft); color: #b3288a; }
+.badge.ready    { background: var(--pink-soft); color: #c81f3d; }
+.badge.acted    { background: var(--green-soft); color: #16a34a; }
+.badge.skipped  { background: rgba(115, 115, 115, 0.15); color: var(--text-muted); }
 
-.badge.pending     { background: var(--amber-soft); color: var(--amber); }
-.badge.processing  { background: rgba(0, 149, 246, 0.16); color: #4db8ff; }
-.badge.completed   { background: var(--green-soft); color: #4ade80; }
+.badge.pending     { background: var(--amber-soft); color: #b45309; }
+.badge.processing  { background: rgba(0, 149, 246, 0.12); color: #0074c7; }
+.badge.completed   { background: var(--green-soft); color: #16a34a; }
 .badge.failed      { background: var(--red-soft); color: var(--ig-heart); }
-.badge.cancelled   { background: rgba(115, 115, 115, 0.2); color: var(--text-muted); }
+.badge.cancelled   { background: rgba(115, 115, 115, 0.15); color: var(--text-muted); }
+
+/* Dark theme badge tweaks — the "dark" palette uses lighter text on darker bg */
+:root[data-theme="dark"] .badge.new,
+:root[data-theme="dark"] .badge.ready,
+:root[data-theme="dark"] .badge.pending,
+:root[data-theme="dark"] .badge.processing { color: #fff; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .badge.new      { color: #e56bc1; }
+  :root:not([data-theme]) .badge.ready    { color: #ff7b8f; }
+  :root:not([data-theme]) .badge.pending  { color: var(--amber); }
+  :root:not([data-theme]) .badge.processing { color: #4db8ff; }
+  :root:not([data-theme]) .badge.acted    { color: #4ade80; }
+  :root:not([data-theme]) .badge.completed { color: #4ade80; }
+}
+
+:root[data-theme="dark"] .badge.new      { color: #e56bc1; }
+:root[data-theme="dark"] .badge.ready    { color: #ff7b8f; }
+:root[data-theme="dark"] .badge.pending  { color: var(--amber); }
+:root[data-theme="dark"] .badge.processing { color: #4db8ff; }
+:root[data-theme="dark"] .badge.acted    { color: #4ade80; }
+:root[data-theme="dark"] .badge.completed { color: #4ade80; }
 
 /* Stats cards */
 .cards {
@@ -358,8 +412,6 @@ input[type="range"] {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   padding: 14px 16px;
-  position: relative;
-  overflow: hidden;
 }
 
 .card .label {
@@ -372,17 +424,29 @@ input[type="range"] {
 
 .card .value { font-size: 24px; font-weight: 700; margin-top: 4px; }
 
-.value.green { color: #4ade80; }
-.value.amber { color: var(--amber); }
+.value.green { color: #16a34a; }
+.value.amber { color: #b45309; }
 .value.red { color: var(--ig-heart); }
-.value.blue { color: #4db8ff; }
-.value.purple { color: #e56bc1; }
+.value.blue { color: #0074c7; }
+.value.purple { color: #b3288a; }
+
+:root[data-theme="dark"] .value.green { color: #4ade80; }
+:root[data-theme="dark"] .value.amber { color: var(--amber); }
+:root[data-theme="dark"] .value.blue  { color: #4db8ff; }
+:root[data-theme="dark"] .value.purple { color: #e56bc1; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .value.green { color: #4ade80; }
+  :root:not([data-theme]) .value.amber { color: var(--amber); }
+  :root:not([data-theme]) .value.blue  { color: #4db8ff; }
+  :root:not([data-theme]) .value.purple { color: #e56bc1; }
+}
 
 /* ============ 5. Header, tabs, toasts ============ */
 
 .app-header {
   border-bottom: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.85);
+  background: var(--header-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   position: sticky;
@@ -403,7 +467,6 @@ input[type="range"] {
 
 .brand { display: flex; align-items: center; gap: 12px; }
 
-/* Story-ring effect around the brand mark */
 .brand-ring {
   padding: 2px;
   border-radius: 50%;
@@ -416,17 +479,18 @@ input[type="range"] {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--bg);
+  background: var(--brand-mark-bg);
   color: var(--text);
   display: grid;
   place-items: center;
   padding: 4px;
+  transition: background 0.2s var(--ease);
 }
 
 .brand-text h1 { font-size: 16px; }
 .subtitle { color: var(--text-muted); font-size: 12px; margin-top: 1px; }
 
-.status-row { display: flex; gap: 8px; }
+.status-row { display: flex; gap: 8px; align-items: center; }
 
 .pill {
   display: inline-flex;
@@ -454,6 +518,40 @@ input[type="range"] {
 .pill .dot.amber { background: var(--amber); }
 .pill .dot.red   { background: var(--ig-heart); }
 
+/* Theme toggle button */
+.theme-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease),
+              border-color 0.12s var(--ease);
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.theme-toggle .icon { display: block; }
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+
+/* In dark mode, show the sun (to switch to light) and hide the moon */
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .theme-toggle .icon-sun { display: block; }
+  :root:not([data-theme]) .theme-toggle .icon-moon { display: none; }
+}
+
 /* Tabs */
 .tabs {
   max-width: 1000px;
@@ -473,8 +571,8 @@ input[type="range"] {
   background: transparent;
   border: none;
   color: var(--text-dim);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   font-family: inherit;
   cursor: pointer;
   display: inline-flex;
@@ -482,9 +580,8 @@ input[type="range"] {
   gap: 8px;
   transition: color 0.12s var(--ease);
   white-space: nowrap;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  font-size: 12px;
 }
 
 .tab:hover { color: var(--text-muted); }
@@ -512,9 +609,12 @@ input[type="range"] {
   text-transform: none;
 }
 
-.tab.active .tab-count {
-  background: var(--pink-soft);
-  color: #ff7b8f;
+.tab.active .tab-count { background: var(--pink-soft); color: #c81f3d; }
+
+:root[data-theme="dark"] .tab.active .tab-count { color: #ff7b8f; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .tab.active .tab-count { color: #ff7b8f; }
 }
 
 /* Toasts */
@@ -533,7 +633,7 @@ input[type="range"] {
   min-width: 220px;
   max-width: 340px;
   padding: 12px 14px;
-  background: var(--surface-3);
+  background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
   color: var(--text);
@@ -548,7 +648,6 @@ input[type="range"] {
   overflow: hidden;
 }
 
-/* Gradient left bar on every toast — subtle IG touch */
 .toast::before {
   content: "";
   position: absolute;
@@ -621,7 +720,6 @@ input[type="range"] {
   margin-top: 4px;
 }
 
-/* Candidate cards */
 .candidates-list { display: flex; flex-direction: column; gap: 12px; }
 
 .candidate {
@@ -630,8 +728,9 @@ input[type="range"] {
   border-radius: var(--r-lg);
   padding: 16px 18px;
   transition: border-color 0.15s var(--ease);
+  .animate-in .candidate {
   animation: card-in 0.22s var(--ease);
-  position: relative;
+  }
 }
 
 .candidate:hover { border-color: var(--border-strong); }
@@ -672,7 +771,6 @@ input[type="range"] {
   .cand-body { grid-template-columns: 1fr; }
 }
 
-/* Post media: image + music overlay */
 .post-media {
   position: relative;
   aspect-ratio: 1 / 1;
@@ -709,7 +807,7 @@ input[type="range"] {
   place-items: center;
   border-style: dashed;
   background:
-    radial-gradient(circle at 50% 50%, rgba(220, 39, 67, 0.06), transparent 60%),
+    radial-gradient(circle at 50% 50%, var(--placeholder-tint), transparent 60%),
     var(--surface-2);
 }
 
@@ -724,7 +822,6 @@ input[type="range"] {
   text-align: center;
 }
 
-/* Music badge — floats over the image bottom, IG Reels style */
 .music-badge {
   position: absolute;
   left: 8px;
@@ -745,13 +842,7 @@ input[type="range"] {
   white-space: nowrap;
 }
 
-.music-icon {
-  font-size: 12px;
-  opacity: 0.9;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-}
+.music-icon { font-size: 12px; opacity: 0.9; flex-shrink: 0; }
 .music-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .music-artist {
   color: rgba(255, 255, 255, 0.7);
@@ -759,7 +850,6 @@ input[type="range"] {
   text-overflow: ellipsis;
 }
 
-/* Edit pill on the media, top-right */
 .media-edit {
   position: absolute;
   top: 8px;
@@ -818,11 +908,16 @@ input[type="range"] {
   background: var(--amber-soft);
   border: 1px solid rgba(245, 158, 11, 0.25);
   border-radius: var(--r-sm);
-  color: var(--amber);
+  color: #b45309;
   font-size: 12px;
 }
 
-/* Suggestions */
+:root[data-theme="dark"] .meta-hint { color: var(--amber); }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .meta-hint { color: var(--amber); }
+}
+
 .suggestions {
   display: flex;
   flex-direction: column;
@@ -846,7 +941,7 @@ input[type="range"] {
 
 .suggestion.picked {
   background: var(--green-soft);
-  border-color: rgba(74, 222, 128, 0.35);
+  border-color: rgba(34, 197, 94, 0.35);
 }
 
 .suggestion-text { flex: 1; line-height: 1.5; }
@@ -860,7 +955,6 @@ input[type="range"] {
 }
 .suggestion:hover .suggestion-actions { opacity: 1; }
 
-/* Card action row */
 .cand-actions {
   display: flex;
   gap: 6px;
@@ -872,7 +966,6 @@ input[type="range"] {
 
 .cand-actions .spacer { flex: 1; }
 
-/* Empty states */
 .empty-state {
   padding: 48px 24px;
   text-align: center;
@@ -881,7 +974,7 @@ input[type="range"] {
   border: 1px dashed var(--border-strong);
   border-radius: var(--r-lg);
   background:
-    radial-gradient(circle at 50% 0%, rgba(188, 24, 136, 0.05), transparent 60%),
+    radial-gradient(circle at 50% 0%, var(--empty-tint), transparent 60%),
     var(--surface);
 }
 
@@ -932,7 +1025,7 @@ td {
 }
 
 tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+tbody tr:hover { background: var(--hover-row); }
 
 td.id-cell, .id-cell {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -943,16 +1036,26 @@ td.id-cell, .id-cell {
 .empty { text-align: center; color: var(--text-muted); padding: 32px; }
 
 .type-tag { font-weight: 700; font-size: 11px; letter-spacing: 0.05em; }
-.type-tag.LIKE    { color: #e56bc1; }
-.type-tag.FOLLOW  { color: #4db8ff; }
-.type-tag.COMMENT { color: #4ade80; }
+.type-tag.LIKE    { color: #b3288a; }
+.type-tag.FOLLOW  { color: #0074c7; }
+.type-tag.COMMENT { color: #16a34a; }
+
+:root[data-theme="dark"] .type-tag.LIKE    { color: #e56bc1; }
+:root[data-theme="dark"] .type-tag.FOLLOW  { color: #4db8ff; }
+:root[data-theme="dark"] .type-tag.COMMENT { color: #4ade80; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .type-tag.LIKE    { color: #e56bc1; }
+  :root:not([data-theme]) .type-tag.FOLLOW  { color: #4db8ff; }
+  :root:not([data-theme]) .type-tag.COMMENT { color: #4ade80; }
+}
 
 .logs {
   max-height: 320px;
   overflow-y: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11.5px;
-  background: #0a0a0a;
+  background: var(--log-bg);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   padding: 12px;
@@ -966,10 +1069,15 @@ td.id-cell, .id-cell {
 }
 .log-time { color: var(--text-dim); flex-shrink: 0; }
 .log-msg { word-break: break-word; color: var(--text-muted); }
-.log-line.warn .log-msg  { color: var(--amber); }
+.log-line.warn .log-msg  { color: #b45309; }
 .log-line.error .log-msg { color: var(--ig-heart); }
 
-/* Settings layout */
+:root[data-theme="dark"] .log-line.warn .log-msg { color: var(--amber); }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .log-line.warn .log-msg { color: var(--amber); }
+}
+
 .settings-actions {
   display: flex;
   justify-content: flex-end;
@@ -981,7 +1089,7 @@ td.id-cell, .id-cell {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.55);
   display: grid;
   place-items: center;
   z-index: 200;
@@ -1017,7 +1125,6 @@ td.id-cell, .id-cell {
   position: relative;
 }
 
-/* Thin gradient rule at the very top of the modal */
 .modal-header::before {
   content: "";
   position: absolute;

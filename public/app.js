@@ -3,13 +3,14 @@
 // FILE PURPOSE:
 // Client-side logic for the dashboard. Organized by feature:
 //   1. State & helpers
-//   2. Tab navigation
+//   2. Theme + tab navigation
 //   3. Toasts
 //   4. Candidates (the main workflow)
 //   5. Actions & demo queue
 //   6. Stats & logs
 //   7. Settings
-//   8. Boot
+//   8. Media editor modal
+//   9. Boot
 //
 // Renders are cheap — every render rebuilds the relevant section from
 // state. That's fine at this scale and much simpler than diffing.
@@ -24,15 +25,11 @@ const state = {
   stats: null,
   queue: null,
   logs: [],
-  provider: "unknown"        // "template" | "gemini" | "anthropic"
+  provider: "unknown"
 };
 
 const API = "/api";
 
-/**
- * Thin fetch wrapper. Adds JSON headers, parses the body, and throws
- * a readable Error on non-2xx.
- */
 async function api(path, options = {}) {
   const res = await fetch(`${API}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -55,6 +52,15 @@ function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[c]));
+}
+
+/**
+ * Cheap signature for a value. Used to skip re-renders when the data
+ * hasn't changed since last poll. Good enough for our shapes — we
+ * don't need cryptographic strength, just change detection.
+ */
+function sig(value) {
+  return JSON.stringify(value);
 }
 
 /** Short "2m ago" style timestamp. */
@@ -95,7 +101,33 @@ async function withLoading(btn, fn) {
   finally { btn.disabled = false; btn.innerHTML = original; }
 }
 
-// ============ 2. Tab navigation ============
+// ============ 2. Theme + tab navigation ============
+
+const THEME_KEY = "theme";
+
+function getStoredTheme() {
+  return localStorage.getItem(THEME_KEY) || "system";
+}
+
+function applyTheme(theme) {
+  if (theme === "system") {
+    document.documentElement.removeAttribute("data-theme");
+  } else {
+    document.documentElement.setAttribute("data-theme", theme);
+  }
+}
+
+function cycleTheme() {
+  const order = ["system", "light", "dark"];
+  const current = getStoredTheme();
+  const next = order[(order.indexOf(current) + 1) % order.length];
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+  toast(`Theme: ${next}`);
+}
+
+applyTheme(getStoredTheme());
+$("theme-toggle").addEventListener("click", cycleTheme);
 
 function switchTab(name) {
   document.querySelectorAll(".tab").forEach((t) =>
@@ -113,10 +145,6 @@ document.querySelectorAll(".tab").forEach((tab) => {
 
 // ============ 3. Toasts ============
 
-/**
- * Show a small notification. `kind` can be "ok", "warn", "err", or
- * omitted for the default (info).
- */
 function toast(message, kind = "") {
   const el = document.createElement("div");
   el.className = `toast ${kind}`.trim();
@@ -130,6 +158,7 @@ function toast(message, kind = "") {
 }
 
 // ============ 4. Candidates ============
+let candidatesSig = "";
 
 async function loadCandidates() {
   try {
@@ -139,8 +168,17 @@ async function loadCandidates() {
         : "/candidates"),
       api("/candidates/counts")
     ]);
+
     state.candidates = list;
     state.candidateCounts = counts;
+
+    // Skip the re-render if nothing changed. Otherwise every poll
+    // would rebuild the DOM and replay the card animation, which
+    // feels like the page is constantly refreshing.
+    const newSig = sig({ list, counts });
+    if (newSig === candidatesSig) return;
+    candidatesSig = newSig;
+
     renderCandidates();
     renderCandidateCounts();
   } catch (err) {
@@ -148,142 +186,79 @@ async function loadCandidates() {
   }
 }
 
-function renderCandidateCounts() {
-  const c = state.candidateCounts;
-  const total = c.new + c.ready + c.acted + c.skipped;
-  $("tab-count-candidates").textContent = total;
+let actionsSig = "";
 
-  // Also nudge the chip labels if you want counts on them later.
-  // (Left as a TODO — the chip counts aren't shown by default.)
+async function loadActions() {
+  try {
+    const [actions, stats, queue] = await Promise.all([
+      api("/actions"),
+      api("/actions/stats"),
+      api("/queue")
+    ]);
+    state.actions = actions;
+    state.stats = stats;
+    state.queue = queue;
+
+    // Skip the re-render if nothing changed. Same pattern as
+    // loadCandidates and loadLogs.
+    const newSig = sig({ actions, stats, queue });
+    if (newSig === actionsSig) return;
+    actionsSig = newSig;
+
+    renderStats();
+    renderQueuePill();
+    renderActions();
+  } catch (err) {
+    console.error("loadActions failed:", err);
+  }
 }
 
-function renderCandidate(c) {
-  const metaBits = [];
-  if (c.author) metaBits.push(`<span>${esc(c.author)}</span>`);
-  if (c.sourceUrl) {
-    metaBits.push(
-      `<a href="${esc(c.sourceUrl)}" target="_blank" rel="noopener"
-          title="Open on Instagram">open ↗</a>`
-    );
+let logsSig = "";
+
+async function loadLogs() {
+  try {
+    const logs = await api("/logs?limit=150");
+    state.logs = logs;
+
+    const newSig = sig(logs);
+    if (newSig === logsSig) return;
+    logsSig = newSig;
+
+    renderLogs();
+  } catch (err) {
+    console.error("loadLogs failed:", err);
   }
-  metaBits.push(`<span>${timeAgo(c.createdAt)}</span>`);
-  const meta = metaBits.join(`<span class="sep">·</span>`);
+}
 
-  // --- Media block: image + music overlay ---
-  // If the image failed to load or isn't set, we show a placeholder
-  // with the option to paste a URL.
-  const musicBadge =
-    c.musicTitle
-      ? `<div class="music-badge" title="${esc(c.musicArtist || "")}">
-           <span class="music-icon">♪</span>
-           <span class="music-title">${esc(c.musicTitle)}</span>
-           ${c.musicArtist ? `<span class="music-artist">· ${esc(c.musicArtist)}</span>` : ""}
-         </div>`
-      : "";
+function renderCandidateCounts() {
+  const c = state.candidateCounts;
+  const total = (c.new || 0) + (c.ready || 0) + (c.acted || 0) + (c.skipped || 0);
+  const el = $("tab-count-candidates");
+  if (el) el.textContent = total;
+}
 
-  const imageHtml = c.imageUrl
-    ? `<div class="post-media">
-         <img
-           src="${esc(c.imageUrl)}"
-           alt=""
-           loading="lazy"
-           referrerpolicy="no-referrer"
-           onerror="this.parentElement.classList.add('media-error')"
-         />
-         ${musicBadge}
-         <button class="media-edit" data-edit-media="${esc(c.id)}"
-                 title="Edit image or music">Edit</button>
-       </div>`
-    : `<div class="post-media placeholder">
-         <div class="placeholder-inner">
-           <span>No image</span>
-           <button class="btn small" data-edit-media="${esc(c.id)}">Add image / music</button>
-         </div>
-       </div>`;
+let candidatesAnimated = false;
 
-  // Caption: clamp long ones.
-  const captionHtml = c.caption
-    ? (() => {
-        const isLong = c.caption.length > 220;
-        return `
-          <div class="cand-caption ${isLong ? "clamped" : ""}"
-               data-caption="${esc(c.id)}">${esc(c.caption)}</div>
-          ${isLong
-            ? `<button class="cand-caption-toggle" data-expand="${esc(c.id)}">Show more</button>`
-            : ""}`;
-      })()
-    : "";
+function renderCandidates() {
+  const el = $("candidates-list");
+  if (!el) return;
 
-  // Suggestions (unchanged from before).
-  const suggestionsHtml = c.suggestions && c.suggestions.length
-    ? `<div class="suggestions">${c.suggestions
-        .map((s, i) => {
-          const picked = c.chosenComment === s;
-          return `
-            <div class="suggestion ${picked ? "picked" : ""}">
-              <span class="suggestion-text">${esc(s)}</span>
-              <span class="suggestion-actions">
-                <button class="btn small" data-pick="${esc(c.id)}" data-idx="${i}">
-                  ${picked ? "✓ Picked" : "Pick"}
-                </button>
-                <button class="btn small" data-copy="${esc(c.id)}" data-idx="${i}">
-                  Copy
-                </button>
-              </span>
-            </div>`;
-        })
-        .join("")}</div>`
-    : "";
+  if (state.candidates.length === 0) {
+    el.innerHTML = emptyStateForList();
+    return;
+  }
 
-  const orphanChosen =
-    c.chosenComment && !(c.suggestions || []).includes(c.chosenComment)
-      ? `<div class="suggestion picked">
-           <span class="suggestion-text">${esc(c.chosenComment)}</span>
-         </div>`
-      : "";
+  // On the first render, add a class that triggers the fade-in.
+  // On subsequent renders, skip it so cards don't flash.
+  const animate = !candidatesAnimated;
+  el.innerHTML =
+    (animate ? '<div class="animate-in">' : "") +
+    state.candidates.map(renderCandidate).join("") +
+    (animate ? "</div>" : "");
 
-  // Metadata error hint, if fetch failed.
-  const metaHint =
-    c.metadataError && !c.imageUrl
-      ? `<div class="meta-hint">${esc(c.metadataError)}</div>`
-      : "";
+  if (animate) candidatesAnimated = true;
 
-  return `
-    <div class="candidate" data-id="${esc(c.id)}">
-      <div class="cand-head">
-        <span class="badge ${esc(c.status)}">${esc(c.status)}</span>
-        <div class="cand-meta">${meta}</div>
-      </div>
-
-      <div class="cand-body">
-        ${imageHtml}
-        <div class="cand-content">
-          ${captionHtml}
-          ${metaHint}
-        </div>
-      </div>
-
-      ${suggestionsHtml}
-      ${orphanChosen}
-
-      <div class="cand-actions">
-        <button class="btn small primary" data-suggest="${esc(c.id)}">
-          ${c.suggestions && c.suggestions.length ? "Regenerate" : "Suggest comments"}
-        </button>
-        ${c.sourceUrl
-          ? `<button class="btn small" data-refresh="${esc(c.id)}"
-                     title="Re-fetch image and caption from Instagram">
-               Refresh
-             </button>`
-          : ""}
-        <button class="btn small" data-acted="${esc(c.id)}"
-                ${c.status === "acted" ? "disabled" : ""}>Mark acted</button>
-        <button class="btn small" data-skip="${esc(c.id)}"
-                ${c.status === "skipped" ? "disabled" : ""}>Skip</button>
-        <span class="spacer"></span>
-        <button class="btn small danger" data-delete="${esc(c.id)}">Delete</button>
-      </div>
-    </div>`;
+  wireCandidateCardEvents();
 }
 
 function emptyStateForList() {
@@ -317,7 +292,38 @@ function renderCandidate(c) {
   metaBits.push(`<span>${timeAgo(c.createdAt)}</span>`);
   const meta = metaBits.join(`<span class="sep">·</span>`);
 
-  // Caption: clamp long ones, offer a "show more".
+  // --- Media block: image + music overlay, or placeholder ---
+  const musicBadge = c.musicTitle
+    ? `<div class="music-badge" title="${esc(c.musicArtist || "")}">
+         <span class="music-icon">♪</span>
+         <span class="music-title">${esc(c.musicTitle)}</span>
+         ${c.musicArtist ? `<span class="music-artist">· ${esc(c.musicArtist)}</span>` : ""}
+       </div>`
+    : "";
+
+  const imageHtml = c.imageUrl
+    ? `<div class="post-media">
+         <img
+           src="${esc(c.imageUrl)}"
+           alt=""
+           loading="lazy"
+           referrerpolicy="no-referrer"
+           onerror="this.parentElement.classList.add('media-error')"
+         />
+         ${musicBadge}
+         <button class="media-edit" data-edit-media="${esc(c.id)}"
+                 title="Edit image or music">Edit</button>
+       </div>`
+    : `<div class="post-media placeholder">
+         <div class="placeholder-inner">
+           <span>No image yet</span>
+           <button class="btn small primary" data-edit-media="${esc(c.id)}">
+             Paste image &amp; music
+           </button>
+         </div>
+       </div>`;
+
+  // --- Caption with show-more for long ones ---
   const captionHtml = c.caption
     ? (() => {
         const isLong = c.caption.length > 220;
@@ -330,7 +336,7 @@ function renderCandidate(c) {
       })()
     : "";
 
-  // Suggestions list.
+  // --- Suggestions ---
   const suggestionsHtml = c.suggestions && c.suggestions.length
     ? `<div class="suggestions">${c.suggestions
         .map((s, i) => {
@@ -339,25 +345,29 @@ function renderCandidate(c) {
             <div class="suggestion ${picked ? "picked" : ""}">
               <span class="suggestion-text">${esc(s)}</span>
               <span class="suggestion-actions">
-                <button class="btn small" data-pick="${esc(c.id)}" data-idx="${i}"
-                        title="${picked ? "Already picked" : "Mark as picked"}">
+                <button class="btn small" data-pick="${esc(c.id)}" data-idx="${i}">
                   ${picked ? "✓ Picked" : "Pick"}
                 </button>
-                <button class="btn small" data-copy="${esc(c.id)}" data-idx="${i}"
-                        title="Copy to clipboard">Copy</button>
+                <button class="btn small" data-copy="${esc(c.id)}" data-idx="${i}">
+                  Copy
+                </button>
               </span>
             </div>`;
         })
         .join("")}</div>`
     : "";
 
-  // If the chosen comment isn't one of the current suggestions
-  // (e.g. after regenerating), show it separately.
   const orphanChosen =
     c.chosenComment && !(c.suggestions || []).includes(c.chosenComment)
       ? `<div class="suggestion picked">
            <span class="suggestion-text">${esc(c.chosenComment)}</span>
          </div>`
+      : "";
+
+  // --- Metadata error hint ---
+  const metaHint =
+    c.metadataError && !c.imageUrl
+      ? `<div class="meta-hint">${esc(c.metadataError)}</div>`
       : "";
 
   return `
@@ -366,9 +376,18 @@ function renderCandidate(c) {
         <span class="badge ${esc(c.status)}">${esc(c.status)}</span>
         <div class="cand-meta">${meta}</div>
       </div>
-      ${captionHtml}
+
+      <div class="cand-body">
+        ${imageHtml}
+        <div class="cand-content">
+          ${captionHtml}
+          ${metaHint}
+        </div>
+      </div>
+
       ${suggestionsHtml}
       ${orphanChosen}
+
       <div class="cand-actions">
         <button class="btn small primary" data-suggest="${esc(c.id)}">
           ${c.suggestions && c.suggestions.length ? "Regenerate" : "Suggest comments"}
@@ -378,18 +397,14 @@ function renderCandidate(c) {
         <button class="btn small" data-skip="${esc(c.id)}"
                 ${c.status === "skipped" ? "disabled" : ""}>Skip</button>
         <span class="spacer"></span>
-        <button class="btn small danger" data-delete="${esc(c.id)}"
-                title="Delete this candidate">Delete</button>
+        <button class="btn small danger" data-delete="${esc(c.id)}">Delete</button>
       </div>
     </div>`;
 }
 
-/**
- * After rendering candidates, attach event listeners to every button
- * that was just created. Central place for all candidate-card events.
- */
 function wireCandidateCardEvents() {
   const el = $("candidates-list");
+  if (!el) return;
 
   // Suggest / Regenerate
   el.querySelectorAll("[data-suggest]").forEach((btn) =>
@@ -462,7 +477,7 @@ function wireCandidateCardEvents() {
     })
   );
 
-  // Copy
+  // Copy suggestion
   el.querySelectorAll("[data-copy]").forEach((btn) =>
     btn.addEventListener("click", async () => {
       const cand = state.candidates.find((c) => c.id === btn.dataset.copy);
@@ -477,31 +492,9 @@ function wireCandidateCardEvents() {
     })
   );
 
-    // Edit media
+  // Edit media
   el.querySelectorAll("[data-edit-media]").forEach((btn) =>
     btn.addEventListener("click", () => openMediaEditor(btn.dataset.editMedia))
-  );
-
-  // Refresh metadata from Instagram
-  el.querySelectorAll("[data-refresh]").forEach((btn) =>
-    btn.addEventListener("click", () =>
-      withLoading(btn, async () => {
-        try {
-          const updated = await api(
-            `/candidates/${btn.dataset.refresh}/refresh-metadata`,
-            { method: "POST" }
-          );
-          if (updated.metadataError && !updated.imageUrl) {
-            toast(updated.metadataError, "warn");
-          } else {
-            toast("Metadata refreshed", "ok");
-          }
-          await loadCandidates();
-        } catch (err) {
-          toast(err.message, "err");
-        }
-      })
-    )
   );
 
   // Show more / less for long captions
@@ -518,9 +511,13 @@ function wireCandidateCardEvents() {
 // ---------- Add candidate form ----------
 
 function openAddPanel(open) {
-  $("add-panel").querySelector(".add-panel-body").hidden = !open;
-  $("add-toggle").setAttribute("aria-expanded", String(open));
-  if (open) setTimeout(() => $("cand-url").focus(), 30);
+  const panel = $("add-panel");
+  if (!panel) return;
+  const body = panel.querySelector(".add-panel-body");
+  const toggle = $("add-toggle");
+  if (body) body.hidden = !open;
+  if (toggle) toggle.setAttribute("aria-expanded", String(open));
+  if (open) setTimeout(() => { const el = $("cand-url"); if (el) el.focus(); }, 30);
 }
 
 $("add-toggle").addEventListener("click", () => {
@@ -530,7 +527,6 @@ $("add-toggle").addEventListener("click", () => {
 
 $("add-cancel").addEventListener("click", () => openAddPanel(false));
 
-// Live character counter on the caption field.
 $("cand-caption").addEventListener("input", () => {
   const len = $("cand-caption").value.length;
   $("cand-caption-hint").textContent = `${len} char${len === 1 ? "" : "s"}`;
@@ -581,34 +577,16 @@ $("cand-chips").addEventListener("click", (e) => {
 
 // ============ 5. Actions & demo queue ============
 
-async function loadActions() {
-  try {
-    const [actions, stats, queue] = await Promise.all([
-      api("/actions"),
-      api("/actions/stats"),
-      api("/queue")
-    ]);
-    state.actions = actions;
-    state.stats = stats;
-    state.queue = queue;
-    renderStats();
-    renderQueuePill();
-    renderActions();
-  } catch (err) {
-    console.error("loadActions failed:", err);
-  }
-}
-
 function renderQueuePill() {
   const q = state.queue;
   if (!q) return;
   const el = $("queue-pill");
+  if (!el) return;
   const running = q.running;
   el.querySelector(".dot").className = `dot ${running ? "green" : "amber"}`;
   el.querySelector(".pill-label").textContent =
     running ? `queue on · ${q.waiting}` : `queue paused · ${q.waiting}`;
 
-  // Make the pill clickable to toggle queue
   el.style.cursor = "pointer";
   el.onclick = async () => {
     try {
@@ -692,7 +670,6 @@ function renderActions() {
 $("filter-status").addEventListener("change", renderActions);
 $("filter-type").addEventListener("change", renderActions);
 
-// Demo action form
 $("type").addEventListener("change", () => {
   $("text-field").hidden = $("type").value !== "COMMENT";
 });
@@ -743,15 +720,6 @@ $("demo-btn").addEventListener("click", async (e) => {
 
 // ============ 6. Logs ============
 
-async function loadLogs() {
-  try {
-    state.logs = await api("/logs?limit=150");
-    renderLogs();
-  } catch (err) {
-    console.error("loadLogs failed:", err);
-  }
-}
-
 function renderLogs() {
   const el = $("logs");
   if (state.logs.length === 0) {
@@ -784,13 +752,14 @@ async function loadConfig() {
     $("failure-rate").value = Math.round(cfg.instagramMock.failureRate * 100);
     updateConfigLabels();
 
-    // Provider comes from the server so we don't have to guess.
     const prov = cfg.provider || "template";
     state.provider = prov;
     const pill = $("provider-pill");
-    pill.querySelector(".dot").className =
-      `dot ${prov === "template" ? "gray" : "green"}`;
-    pill.querySelector(".pill-label").textContent = `ai: ${prov}`;
+    if (pill) {
+      pill.querySelector(".dot").className =
+        `dot ${prov === "template" ? "gray" : "green"}`;
+      pill.querySelector(".pill-label").textContent = `ai: ${prov}`;
+    }
   } catch (err) {
     console.error("loadConfig failed:", err);
   }
@@ -831,17 +800,12 @@ $("save-config").addEventListener("click", async (e) => {
   });
 });
 
-// ============ Media editor ============
+// ============ 8. Media editor modal ============
 
-/**
- * Show a small modal for editing image URL and music fields.
- * Called from the Edit button on a candidate card.
- */
 function openMediaEditor(candidateId) {
   const c = state.candidates.find((x) => x.id === candidateId);
   if (!c) return;
 
-  // Build a simple overlay.
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
@@ -883,6 +847,15 @@ function openMediaEditor(candidateId) {
   requestAnimationFrame(() => overlay.classList.add("show"));
   setTimeout(() => overlay.querySelector("#edit-image").focus(), 40);
 
+  // Paste a URL directly into the image field.
+  overlay.querySelector("#edit-image").addEventListener("paste", (e) => {
+    const text = e.clipboardData.getData("text");
+    if (text && /^https?:\/\//i.test(text.trim())) {
+      e.preventDefault();
+      overlay.querySelector("#edit-image").value = text.trim();
+    }
+  });
+
   const close = () => {
     overlay.classList.remove("show");
     setTimeout(() => overlay.remove(), 200);
@@ -913,17 +886,14 @@ function openMediaEditor(candidateId) {
     });
   });
 
-  // Escape closes.
   const onEsc = (e) => {
     if (e.key === "Escape") { close(); document.removeEventListener("keydown", onEsc); }
   };
   document.addEventListener("keydown", onEsc);
 }
 
-// ============ 8. Boot ============
+// ============ 9. Boot ============
 
-// Keyboard shortcut: ⌘K / Ctrl+K opens the add-candidate panel and
-// switches to the Candidates tab.
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
     e.preventDefault();
@@ -932,17 +902,14 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Restore the last active tab, or default to Candidates.
 const savedTab = localStorage.getItem("activeTab") || "candidates";
 switchTab(savedTab);
 
-// Initial data load.
 loadCandidates();
 loadActions();
 loadLogs();
 loadConfig();
 
-// Polls. Candidates and logs are cheap; keep them fresh.
-setInterval(loadCandidates, 5000);
-setInterval(loadLogs, 3000);
-setInterval(loadActions, 2000);
+setInterval(loadCandidates, 10000);  // was 5000
+setInterval(loadLogs, 8000);         // was 3000
+setInterval(loadActions, 5000);      // was 2000

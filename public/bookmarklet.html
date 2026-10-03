@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Adding…</title>
+  <style>
+    body {
+      font-family: -apple-system, sans-serif;
+      background: #121212; color: #f5f5f5;
+      display: grid; place-items: center;
+      height: 100vh; margin: 0; font-size: 14px;
+    }
+    .ok    { color: #22c55e; }
+    .err   { color: #ef4444; }
+    .muted { color: #a8a8a8; font-size: 12px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div id="msg">Adding…</div>
+  <script>
+    // Read the ?data= param that the bookmarklet put in the URL.
+    var params = new URLSearchParams(location.search);
+    var raw = params.get("data");
+    if (!raw) {
+      document.getElementById("msg").innerHTML =
+        '<span class="err">No data received.</span>';
+    } else {
+      var payload;
+      try { payload = JSON.parse(raw); }
+      catch (e) {
+        document.getElementById("msg").innerHTML =
+          '<span class="err">Bad payload.</span>';
+        payload = null;
+      }
+
+      if (payload) {
+        // Same origin as the API, so no CORS. CSP doesn't apply either
+        // because we're on our own page now.
+        fetch("/api/candidates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.error) {
+            document.getElementById("msg").innerHTML =
+              '<span class="err">' + d.error + '</span>';
+          } else {
+            document.getElementById("msg").innerHTML =
+              '<span class="ok">Added ' + d.id + '</span>' +
+              '<div class="muted">Closing…</div>';
+            setTimeout(function () { window.close(); }, 900);
+          }
+        })
+        .catch(function (e) {
+          document.getElementById("msg").innerHTML =
+            '<span class="err">' + e.message + '</span>';
+        });
+      }
+    }
+  </script>
+</body>
+</html>

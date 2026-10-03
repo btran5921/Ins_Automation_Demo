@@ -21,6 +21,7 @@
   },
   "homepage": "https://github.com/btran5921/Ins_Automation_Demo#readme",
   "dependencies": {
+    "cheerio": "^1.2.0",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "mongoose": "^8.5.0"

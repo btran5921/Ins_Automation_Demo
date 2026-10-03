@@ -29,6 +29,16 @@ const MONGODB_URI =
   process.env.MONGODB_URI || "mongodb://localhost:27017/instagram_demo";
 
 app.use(express.json());
+// Allow the bookmarklet (running on instagram.com) to POST here.
+// Fine for a local-only tool. If you ever deploy this publicly,
+// scope Access-Control-Allow-Origin down to your own domain.
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.get("/api/health", (req, res) => {
