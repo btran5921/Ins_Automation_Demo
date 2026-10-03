@@ -19,6 +19,7 @@ const candidateStore = require("../services/candidateStore");
 const aiSuggest = require("../services/aiSuggest");
 const postMetadata = require("../services/postMetadata");
 const logger = require("../utils/logger");
+const mediaCache = require("../services/mediaCache");
 
 /* ---------------- POST /api/candidates ---------------- */
 async function createCandidate(req, res, next) {
@@ -35,6 +36,8 @@ async function createCandidate(req, res, next) {
       typeof body.notes === "string" ? body.notes.trim() : "";
     const imageUrl =
       typeof body.imageUrl === "string" ? body.imageUrl.trim() : null;
+    const videoUrl =
+      typeof body.videoUrl === "string" ? body.videoUrl.trim() : null;
     const musicTitle =
       typeof body.musicTitle === "string" ? body.musicTitle.trim() : null;
     const musicArtist =
@@ -46,13 +49,16 @@ async function createCandidate(req, res, next) {
       });
     }
 
-    // Normalize the URL to canonical form if it looks like a post.
-    // We don't auto-fetch metadata — Instagram blocks server-side
-    // scraping. The user fills in image + music via the Edit modal.
     let normalizedUrl = sourceUrl;
     if (sourceUrl && postMetadata.isAllowedUrl(sourceUrl)) {
       normalizedUrl = postMetadata.normalizeUrl(sourceUrl) || sourceUrl;
     }
+
+    // ⭐ NEW — download remote images/videos to local disk before saving.
+    // If the download fails, cacheUrl returns null and we fall back to
+    // the original URL, so nothing breaks.
+    const cachedImage = imageUrl ? await mediaCache.cacheUrl(imageUrl) : null;
+    const cachedVideo = videoUrl ? await mediaCache.cacheUrl(videoUrl) : null;
 
     const id = await candidateStore.nextCandidateId();
 
@@ -62,7 +68,8 @@ async function createCandidate(req, res, next) {
       author,
       caption,
       notes,
-      imageUrl,
+      imageUrl: cachedImage || imageUrl,   // ⭐ use the local path if we got one
+      videoUrl: cachedVideo || videoUrl,   // ⭐ same for video
       musicTitle,
       musicArtist,
       metadataError: null,
@@ -175,6 +182,9 @@ async function updateCandidate(req, res, next) {
     if (typeof body.imageUrl === "string") {
       candidate.imageUrl = body.imageUrl.trim() || null;
     }
+    if (typeof body.videoUrl === "string") {
+      candidate.videoUrl = body.videoUrl.trim() || null;
+    }
     if (typeof body.musicTitle === "string") {
       candidate.musicTitle = body.musicTitle.trim() || null;
     }
@@ -197,6 +207,16 @@ async function updateCandidate(req, res, next) {
     }
 
     await candidateStore.persist(candidate);
+    // Cache any new remote media.
+    if (candidate.imageUrl && candidate.imageUrl.startsWith("http")) {
+      const cached = await mediaCache.cacheUrl(candidate.imageUrl);
+      if (cached) candidate.imageUrl = cached;
+    }
+    if (candidate.videoUrl && candidate.videoUrl.startsWith("http")) {
+      const cached = await mediaCache.cacheUrl(candidate.videoUrl);
+      if (cached) candidate.videoUrl = cached;
+    }
+
     res.json(candidate);
   } catch (error) {
     next(error);

@@ -25,6 +25,7 @@ const CandidateSchema = new Schema(
 
     // --- New: fetched/displayed post details ---
     imageUrl: { type: String, default: null },
+    videoUrl: { type: String, default: null },
     musicTitle: { type: String, default: null },
     musicArtist: { type: String, default: null },
     metadataError: { type: String, default: null },

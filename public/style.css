@@ -787,6 +787,14 @@ input[type="range"] { width: 100%; accent-color: var(--pink); cursor: pointer; }
   transition: opacity 0.2s var(--ease);
 }
 
+.post-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+
 .post-media.media-error img { display: none; }
 
 .post-media.media-error::after {
@@ -1317,6 +1325,386 @@ td.id-cell, .id-cell {
   grid-template-columns: 168px 1fr;
   gap: 20px;
   margin-bottom: 0;
+}
+
+/* ============================================================
+   12. Candidates toolbar (search + chips)
+   ============================================================ */
+
+.cand-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 20px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  position: sticky;
+  top: 60px;
+  z-index: 5;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  flex-wrap: wrap;
+}
+
+/* Search input on the left */
+.cand-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 200px;
+  min-width: 160px;
+  padding: 7px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  transition: border-color 0.15s var(--ease);
+}
+
+.cand-search:focus-within { border-color: var(--ig-blue); }
+.cand-search svg { flex-shrink: 0; opacity: 0.7; }
+
+.cand-search input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  padding: 0;
+  min-width: 0;
+}
+
+.cand-search input::placeholder { color: var(--text-dim); }
+
+/* Chips inside the toolbar — remove their own margins */
+.cand-toolbar .chips {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+/* ============================================================
+   13. Playground (Demo tab) layout
+   ============================================================ */
+
+.demo-header {
+  margin: 0 0 20px;
+}
+
+.demo-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-transform: none;
+  margin: 0 0 4px;
+}
+
+.demo-sub {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+  max-width: 60ch;
+}
+
+.demo-grid {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 20px;
+  align-items: start;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 900px) {
+  .demo-grid { grid-template-columns: 1fr; }
+}
+
+.demo-actions-panel { margin-top: 0; }
+
+/* ============================================================
+   14. Settings page layout
+   ============================================================ */
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 780px) {
+  .settings-grid { grid-template-columns: 1fr; }
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-head h2 { margin: 0; }
+
+.settings-note {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: right;
+}
+
+.setting {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.setting-label .mono {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.settings-help {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Presets */
+.presets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.presets-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.presets-row {
+  display: flex;
+  gap: 6px;
+}
+
+.preset {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.12s var(--ease);
+}
+
+.preset:hover { color: var(--text); border-color: var(--text-dim); }
+
+.preset.active {
+  background: var(--surface-2);
+  border-color: var(--ig-blue);
+  color: var(--text);
+  box-shadow: 0 0 0 2px rgba(0, 149, 246, 0.15);
+}
+
+/* Footer */
+.settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* ============================================================
+   15. Candidate card — cleaner layout
+   ============================================================ */
+
+.cand-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cand-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  flex-wrap: wrap;
+}
+
+.cand-meta > span,
+.cand-meta > a {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Preview button sits neatly in the meta row */
+.cand-meta .cand-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.12s var(--ease);
+  text-decoration: none;
+}
+
+.cand-meta .cand-preview:hover {
+  color: var(--text);
+  border-color: var(--ig-blue);
+  background: rgba(0, 149, 246, 0.08);
+}
+
+/* ============================================================
+   16. Preview modal (Instagram embed + shield)
+   ============================================================ */
+
+.preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  display: grid;
+  place-items: center;
+  z-index: 300;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+  padding: 20px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.preview-overlay.show { opacity: 1; }
+
+.preview {
+  width: 100%;
+  max-width: 560px;
+  max-height: 92vh;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(10px) scale(0.98);
+  transition: transform 0.2s var(--ease);
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-overlay.show .preview { transform: none; }
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.preview-header::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--ig-gradient);
+}
+
+.preview-header h3 { font-size: 14px; font-weight: 600; }
+
+/* Iframe area — relative so we can position the shield over it */
+.preview-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #000;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0;
+}
+
+.preview-body iframe {
+  display: block;
+  width: 540px;
+  max-width: 100%;
+  height: 680px;
+  margin: 0 auto;
+  border: 0;
+  background: #000;
+  flex: 0 0 auto;
+}
+
+
+/* Footer with candidate ID + open link */
+.preview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.preview-meta {
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+/* ============================================================
+   17. Empty state mini polish
+   ============================================================ */
+
+.empty-state {
+  padding: 56px 24px;
 }
 
 .cand-caption { font-size: 14px; line-height: 1.6; margin-bottom: 8px; }

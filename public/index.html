@@ -2,34 +2,31 @@
 <!--
   public/index.html
   FILE PURPOSE:
-  Layout for the dashboard, themed after Instagram. Three tabs:
-    1. Candidates — the manual-assist workflow (main tool)
-    2. Demo       — the mock queue, stats, and activity log
-    3. Settings   — rate limiter + mock API config
+  Layout for the dashboard. Four tabs:
+    1. Overview   — read-only summary
+    2. Candidates — manual-assist workflow (main tool)
+    3. Demo       — mock queue playground
+    4. Settings   — rate limiter + mock API config
 
-  Element IDs and data attributes match public/app.js exactly, so
-  no JS changes are needed when restyling this file.
+  Element IDs and data attributes match public/app.js exactly.
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="dark light" />
   <title>Engagement Helper</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Toast notifications stack here. app.js appends children. -->
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
   <!-- ======================= Header ======================= -->
   <header class="app-header">
     <div class="header-inner">
       <div class="brand">
-        <!-- Gradient story-ring around the brand mark, IG style -->
         <div class="brand-ring">
           <div class="brand-mark" aria-hidden="true">
-            <!-- Minimal camera glyph, like Instagram's icon -->
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
                  stroke="currentColor" stroke-width="1.8"
                  stroke-linecap="round" stroke-linejoin="round">
@@ -45,7 +42,6 @@
         </div>
       </div>
 
-            <!-- Live status pills -->
       <div class="status-row">
         <div id="provider-pill" class="pill" title="Comment suggestion source">
           <span class="dot gray"></span>
@@ -55,11 +51,8 @@
           <span class="dot gray"></span>
           <span class="pill-label">queue</span>
         </div>
-
-        <!-- Theme toggle: cycles system → light → dark → system -->
         <button id="theme-toggle" class="theme-toggle"
                 aria-label="Toggle theme" title="Switch theme">
-          <!-- Sun (shown in dark mode) -->
           <svg class="icon icon-sun" viewBox="0 0 24 24" width="16" height="16"
                fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round">
@@ -67,7 +60,6 @@
             <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41
                      M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
           </svg>
-          <!-- Moon (shown in light mode) -->
           <svg class="icon icon-moon" viewBox="0 0 24 24" width="16" height="16"
                fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round">
@@ -80,19 +72,21 @@
 
   <!-- ======================= Tabs ======================= -->
   <nav class="tabs" role="tablist">
-    <button class="tab active" data-tab="overview" role="tab">Overview</button>
-    <button class="tab" data-tab="candidates" role="tab">
+    <button class="tab" data-tab="overview" role="tab">Overview</button>
+    <button class="tab active" data-tab="candidates" role="tab">
       Candidates
       <span class="tab-count" id="tab-count-candidates">0</span>
     </button>
-    <button class="tab" data-tab="demo" role="tab">Demo</button>
+    <button class="tab" data-tab="demo" role="tab">Playground</button>
     <button class="tab" data-tab="settings" role="tab">Settings</button>
   </nav>
 
   <main>
 
-    <!-- TAB: OVERVIEW - read-only summary built from the same state as the other tabs -->
-    <section data-panel="overview">
+    <!-- ============================================================
+         TAB: OVERVIEW
+         ============================================================ -->
+    <section data-panel="overview" hidden>
       <div class="ov-kpis" id="ov-kpis"></div>
 
       <div class="ov-grid">
@@ -124,9 +118,9 @@
     <!-- ============================================================
          TAB: CANDIDATES
          ============================================================ -->
-    <section data-panel="candidates" hidden>
+    <section data-panel="candidates">
 
-      <!-- Collapsible "Add candidate" panel. Auto-opens on ⌘K. -->
+      <!-- Add candidate (collapsed) -->
       <div class="panel add-panel" id="add-panel">
         <button class="add-panel-toggle" id="add-toggle" aria-expanded="false">
           <span class="add-icon" aria-hidden="true">
@@ -146,23 +140,15 @@
               <label for="cand-url">
                 Post URL <span class="hint">optional</span>
               </label>
-              <input
-                id="cand-url"
-                type="text"
-                placeholder="https://instagram.com/p/…"
-                autocomplete="off"
-              />
+              <input id="cand-url" type="text"
+                     placeholder="https://instagram.com/p/…" autocomplete="off" />
             </div>
             <div class="field">
               <label for="cand-author">
                 Author <span class="hint">optional</span>
               </label>
-              <input
-                id="cand-author"
-                type="text"
-                placeholder="@username"
-                autocomplete="off"
-              />
+              <input id="cand-author" type="text"
+                     placeholder="@username" autocomplete="off" />
             </div>
           </div>
 
@@ -171,11 +157,8 @@
               Caption or note
               <span class="hint" id="cand-caption-hint">0 chars</span>
             </label>
-            <textarea
-              id="cand-caption"
-              placeholder="Paste the post's caption, or just describe what it's about…"
-              rows="3"
-            ></textarea>
+            <textarea id="cand-caption" rows="3"
+              placeholder="Paste the post's caption, or just describe what it's about…"></textarea>
           </div>
 
           <div class="add-panel-actions">
@@ -187,170 +170,203 @@
         </form>
       </div>
 
-      <!-- Status filter chips -->
-      <div class="chips" id="cand-chips">
-        <button class="chip active" data-status="">All</button>
-        <button class="chip" data-status="new">New</button>
-        <button class="chip" data-status="ready">Ready</button>
-        <button class="chip" data-status="acted">Acted</button>
-        <button class="chip" data-status="skipped">Skipped</button>
+      <!-- Sticky toolbar: search + chips + view -->
+      <div class="cand-toolbar">
+        <div class="cand-search">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+          <input id="cand-search" type="text"
+                 placeholder="Search captions, authors…" autocomplete="off" />
+        </div>
+
+        <div class="chips" id="cand-chips">
+          <button class="chip active" data-status="">All</button>
+          <button class="chip" data-status="new">New</button>
+          <button class="chip" data-status="ready">Ready</button>
+          <button class="chip" data-status="acted">Acted</button>
+          <button class="chip" data-status="skipped">Skipped</button>
+        </div>
       </div>
 
-      <!-- Candidate cards render here -->
       <div id="candidates-list" class="candidates-list"></div>
     </section>
 
     <!-- ============================================================
-         TAB: DEMO
+         TAB: PLAYGROUND (demo queue)
          ============================================================ -->
     <section data-panel="demo" hidden>
 
-      <div class="cards" id="stats"></div>
-
-      <div class="grid">
-        <div class="column">
-          <section class="panel">
-            <h2>Add demo action</h2>
-            <form id="action-form">
-              <div class="field">
-                <label for="type">Type</label>
-                <select id="type" name="type">
-                  <option value="LIKE">LIKE</option>
-                  <option value="FOLLOW">FOLLOW</option>
-                  <option value="COMMENT">COMMENT</option>
-                </select>
-              </div>
-
-              <div class="field">
-                <label for="target">Target</label>
-                <input
-                  id="target"
-                  name="target"
-                  type="text"
-                  placeholder="post_123 or @example_user"
-                  autocomplete="off"
-                  required
-                />
-              </div>
-
-              <div class="field" id="text-field" hidden>
-                <label for="text">Comment text</label>
-                <input
-                  id="text"
-                  name="text"
-                  type="text"
-                  placeholder="Nice post!"
-                  autocomplete="off"
-                />
-              </div>
-
-              <div class="field-row">
-                <button type="submit" class="btn primary">Add to queue</button>
-                <button type="button" class="btn" id="demo-btn">
-                  Add 5 demo actions
-                </button>
-              </div>
-            </form>
-          </section>
-
-          <section class="panel">
-            <h2>Activity log</h2>
-            <div class="logs" id="logs"></div>
-            <div class="panel-footer">
-              <button class="btn small" id="clear-logs">Clear logs</button>
-            </div>
-          </section>
-        </div>
-
-        <div class="column">
-          <section class="panel">
-            <div class="panel-header">
-              <h2>Actions</h2>
-              <div class="filters">
-                <select id="filter-status">
-                  <option value="">All statuses</option>
-                  <option value="pending">Pending</option>
-                  <option value="processing">Processing</option>
-                  <option value="completed">Completed</option>
-                  <option value="failed">Failed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-                <select id="filter-type">
-                  <option value="">All types</option>
-                  <option value="LIKE">LIKE</option>
-                  <option value="FOLLOW">FOLLOW</option>
-                  <option value="COMMENT">COMMENT</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Type</th>
-                    <th>Target</th>
-                    <th>Status</th>
-                    <th>Attempts</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="actions-body">
-                  <tr><td colspan="6" class="empty">No actions yet.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
+      <div class="demo-header">
+        <div>
+          <h2 class="demo-title">Mock Instagram pipeline</h2>
+          <p class="demo-sub">
+            Simulate queued actions against the mock API. Nothing here touches real Instagram.
+          </p>
         </div>
       </div>
+
+      <!-- Stats -->
+      <div class="cards" id="stats"></div>
+
+      <div class="demo-grid">
+        <!-- Left: playground -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Add a mock action</h2>
+          </div>
+          <form id="action-form">
+            <div class="field">
+              <label for="type">Type</label>
+              <select id="type" name="type">
+                <option value="LIKE">LIKE</option>
+                <option value="FOLLOW">FOLLOW</option>
+                <option value="COMMENT">COMMENT</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="target">Target</label>
+              <input id="target" name="target" type="text"
+                     placeholder="post_123 or @example_user"
+                     autocomplete="off" required />
+            </div>
+
+            <div class="field" id="text-field" hidden>
+              <label for="text">Comment text</label>
+              <input id="text" name="text" type="text"
+                     placeholder="Nice post!" autocomplete="off" />
+            </div>
+
+            <div class="field-row">
+              <button type="submit" class="btn primary">Add to queue</button>
+              <button type="button" class="btn" id="demo-btn">
+                Add 5 demo actions
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Right: activity -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Activity</h2>
+            <button class="btn small ghost" id="clear-logs">Clear</button>
+          </div>
+          <div class="logs" id="logs"></div>
+        </section>
+      </div>
+
+      <!-- Full width: actions table -->
+      <section class="panel demo-actions-panel">
+        <div class="panel-header">
+          <h2>Actions</h2>
+          <div class="filters">
+            <select id="filter-status">
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="processing">Processing</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <select id="filter-type">
+              <option value="">All types</option>
+              <option value="LIKE">LIKE</option>
+              <option value="FOLLOW">FOLLOW</option>
+              <option value="COMMENT">COMMENT</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Target</th>
+                <th>Status</th>
+                <th>Attempts</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="actions-body">
+              <tr><td colspan="6" class="empty">No actions yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
     <!-- ============================================================
          TAB: SETTINGS
          ============================================================ -->
     <section data-panel="settings" hidden>
-      <section class="panel">
-        <h2>Rate limiter</h2>
-        <p class="muted">
-          How long the queue waits between demo actions. Doesn't affect candidates.
-        </p>
 
-        <div class="field">
-          <label for="min-delay">
-            Min delay: <span class="mono" id="min-delay-value">2000</span> ms
-          </label>
-          <input id="min-delay" type="range" min="0" max="10000"
-                 step="250" value="2000" />
-        </div>
+      <div class="settings-grid">
 
-        <div class="field">
-          <label for="max-delay">
-            Max delay: <span class="mono" id="max-delay-value">4000</span> ms
-          </label>
-          <input id="max-delay" type="range" min="0" max="10000"
-                 step="250" value="4000" />
-        </div>
-      </section>
+        <section class="panel settings-panel">
+          <div class="settings-head">
+            <h2>Rate limiter</h2>
+            <span class="settings-note">Controls spacing between demo actions</span>
+          </div>
 
-      <section class="panel">
-        <h2>Mock Instagram API</h2>
-        <p class="muted">
-          Only affects demo actions. Higher failure rates exercise the retry system.
-        </p>
+          <div class="setting">
+            <div class="setting-label">
+              <span>Minimum delay</span>
+              <span class="mono"><span id="min-delay-value">2000</span> ms</span>
+            </div>
+            <input id="min-delay" type="range" min="0" max="10000" step="250" value="2000" />
+          </div>
 
-        <div class="field">
-          <label for="failure-rate">
-            Failure rate: <span class="mono" id="failure-rate-value">10</span>%
-          </label>
-          <input id="failure-rate" type="range" min="0" max="100"
-                 step="1" value="10" />
-        </div>
-      </section>
+          <div class="setting">
+            <div class="setting-label">
+              <span>Maximum delay</span>
+              <span class="mono"><span id="max-delay-value">4000</span> ms</span>
+            </div>
+            <input id="max-delay" type="range" min="0" max="10000" step="250" value="4000" />
+          </div>
 
-      <div class="settings-actions">
+          <div class="presets">
+            <span class="presets-label">Presets</span>
+            <div class="presets-row">
+              <button type="button" class="preset" data-min="250" data-max="800">Fast</button>
+              <button type="button" class="preset" data-min="2000" data-max="4000">Normal</button>
+              <button type="button" class="preset" data-min="6000" data-max="10000">Slow</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel settings-panel">
+          <div class="settings-head">
+            <h2>Mock Instagram API</h2>
+            <span class="settings-note">Failure rate for exercising retries</span>
+          </div>
+
+          <div class="setting">
+            <div class="setting-label">
+              <span>Failure rate</span>
+              <span class="mono"><span id="failure-rate-value">10</span>%</span>
+            </div>
+            <input id="failure-rate" type="range" min="0" max="100" step="1" value="10" />
+          </div>
+
+          <p class="settings-help">
+            Higher values make the mock API fail more often, so you can
+            watch the queue retry. 0% = always succeeds, 100% = always fails.
+          </p>
+        </section>
+
+      </div>
+
+      <div class="settings-footer">
+        <button class="btn ghost" id="reset-config">Reset to defaults</button>
         <button class="btn primary" id="save-config">Save settings</button>
       </div>
+
     </section>
 
   </main>

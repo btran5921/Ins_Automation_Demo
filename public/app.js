@@ -19,7 +19,8 @@
 
 const state = {
   candidates: [],
-  candidateFilter: "",      // "" = all
+  candidateFilter: "",
+  candidateSearch: "",
   candidateCounts: { new: 0, ready: 0, acted: 0, skipped: 0 },
   actions: [],
   stats: null,
@@ -254,12 +255,33 @@ function renderCandidates() {
     return;
   }
 
+    // Apply the client-side search filter (status filtering is done
+  // server-side by loadCandidates).
+  const q = state.candidateSearch.trim().toLowerCase();
+  const visible = q
+    ? state.candidates.filter((c) =>
+        [c.caption, c.author, c.notes, c.sourceUrl, c.musicTitle, c.musicArtist]
+          .filter(Boolean)
+          .some((field) => String(field).toLowerCase().includes(q))
+      )
+    : state.candidates;
+
+  if (visible.length === 0) {
+    el.innerHTML = `
+      <div class="empty-state">
+        <strong>No matches for "${esc(state.candidateSearch)}"</strong>
+        Try a different search, or clear the field.
+      </div>`;
+    return;
+  }
+
   // On the first render, add a class that triggers the fade-in.
   // On subsequent renders, skip it so cards don't flash.
   const animate = !candidatesAnimated;
+
   el.innerHTML =
     (animate ? '<div class="animate-in">' : "") +
-    state.candidates.map(renderCandidate).join("") +
+    visible.map(renderCandidate).join("") +
     (animate ? "</div>" : "");
 
   if (animate) candidatesAnimated = true;
@@ -289,16 +311,10 @@ function emptyStateForList() {
 function renderCandidate(c) {
   const metaBits = [];
   if (c.author) metaBits.push(`<span>${esc(c.author)}</span>`);
-  if (c.sourceUrl) {
-    metaBits.push(
-      `<a href="${esc(c.sourceUrl)}" target="_blank" rel="noopener"
-          title="Open on Instagram">open ↗</a>`
-    );
-  }
   metaBits.push(`<span>${timeAgo(c.createdAt)}</span>`);
   const meta = metaBits.join(`<span class="sep">·</span>`);
 
-  // --- Media block: image + music overlay, or placeholder ---
+  // --- Media block: video > image > placeholder ---
   const musicBadge = c.musicTitle
     ? `<div class="music-badge" title="${esc(c.musicArtist || "")}">
          <span class="music-icon">♪</span>
@@ -307,24 +323,36 @@ function renderCandidate(c) {
        </div>`
     : "";
 
-  const imageHtml = c.imageUrl
-    ? `<div class="post-media">
-         <img
+  const mediaInner = c.videoUrl
+    ? `<video
+         src="${esc(c.videoUrl)}"
+         controls
+         playsinline
+         preload="metadata"
+         ${c.imageUrl ? `poster="${esc(c.imageUrl)}"` : ""}
+       ></video>`
+    : c.imageUrl
+      ? `<img
            src="${esc(c.imageUrl)}"
            alt=""
            loading="lazy"
            referrerpolicy="no-referrer"
            onerror="this.parentElement.classList.add('media-error')"
-         />
+         />`
+      : null;
+
+  const imageHtml = mediaInner
+    ? `<div class="post-media">
+         ${mediaInner}
          ${musicBadge}
          <button class="media-edit" data-edit-media="${esc(c.id)}"
-                 title="Edit image or music">Edit</button>
+                 title="Edit media">Edit</button>
        </div>`
     : `<div class="post-media placeholder">
          <div class="placeholder-inner">
-           <span>No image yet</span>
+           <span>No media yet</span>
            <button class="btn small primary" data-edit-media="${esc(c.id)}">
-             Paste image &amp; music
+             Paste media &amp; music
            </button>
          </div>
        </div>`;
@@ -372,7 +400,7 @@ function renderCandidate(c) {
 
   // --- Metadata error hint ---
   const metaHint =
-    c.metadataError && !c.imageUrl
+    c.metadataError && !c.imageUrl && !c.videoUrl
       ? `<div class="meta-hint">${esc(c.metadataError)}</div>`
       : "";
 
@@ -380,7 +408,15 @@ function renderCandidate(c) {
     <div class="candidate" data-id="${esc(c.id)}">
       <div class="cand-head">
         <span class="badge ${esc(c.status)}">${esc(c.status)}</span>
-        <div class="cand-meta">${meta}</div>
+        <div class="cand-meta">
+          ${meta}
+          ${c.sourceUrl
+            ? `<button class="cand-preview" data-preview="${esc(c.id)}"
+                       title="Preview post">Preview</button>
+               <a href="${esc(c.sourceUrl)}" target="_blank" rel="noopener"
+                  title="Open on Instagram">open ↗</a>`
+            : ""}
+        </div>
       </div>
 
       <div class="cand-body">
@@ -426,6 +462,7 @@ function wireCandidateCardEvents() {
       })
     )
   );
+  
 
   // Mark acted
   el.querySelectorAll("[data-acted]").forEach((btn) =>
@@ -512,7 +549,21 @@ function wireCandidateCardEvents() {
       btn.textContent = cap.classList.contains("clamped") ? "Show more" : "Show less";
     })
   );
-}
+
+    // Show more / less for long captions
+  el.querySelectorAll("[data-expand]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const cap = el.querySelector(`[data-caption="${btn.dataset.expand}"]`);
+      if (!cap) return;
+      cap.classList.toggle("clamped");
+      btn.textContent = cap.classList.contains("clamped") ? "Show more" : "Show less";
+    })
+  );
+
+  el.querySelectorAll("[data-preview]").forEach((btn) =>
+    btn.addEventListener("click", () => openPostPreview(btn.dataset.preview))
+  );
+}      
 
 // ---------- Add candidate form ----------
 
@@ -579,6 +630,11 @@ $("cand-chips").addEventListener("click", (e) => {
   );
   state.candidateFilter = chip.dataset.status || "";
   loadCandidates();
+});
+// Search box — filters client-side over the already-loaded candidates.
+$("cand-search").addEventListener("input", (e) => {
+  state.candidateSearch = e.target.value;
+  renderCandidates();
 });
 
 // ============ 5. Actions & demo queue ============
@@ -806,6 +862,109 @@ $("save-config").addEventListener("click", async (e) => {
   });
 });
 
+// Presets: click a preset to set both sliders at once.
+document.querySelectorAll(".preset").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    $("min-delay").value = btn.dataset.min;
+    $("max-delay").value = btn.dataset.max;
+    updateConfigLabels();
+    document.querySelectorAll(".preset").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+  });
+});
+
+// Reset to defaults.
+$("reset-config").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  await withLoading(btn, async () => {
+    try {
+      await api("/config", {
+        method: "PUT",
+        body: JSON.stringify({
+          rateLimiter: { minDelayMs: 2000, maxDelayMs: 4000 },
+          instagramMock: { failureRate: 0.1 }
+        })
+      });
+      toast("Reset to defaults", "ok");
+      document.querySelectorAll(".preset").forEach((b) => b.classList.remove("active"));
+      await loadConfig();
+    } catch (err) { toast(err.message, "err"); }
+  });
+});
+
+// ============ 7b. Preview modal (Instagram embed + overlay shield) ============
+
+/**
+ * Instagram's /embed/ endpoint renders a public post or Reel in an
+ * iframe, with full video playback. The only downside is Instagram's
+ * own "View more on Instagram" button that appears near the center
+ * of the iframe while a video plays — we can't remove it (cross-origin)
+ * but we CAN cover it with our own layer. That's what the .embed-shield
+ * div does: transparent to the eye where it doesn't need to be, opaque
+ * over the button, and clicking it opens the post in a new tab
+ * (same intent as Instagram's button, no confusion).
+ */
+function openPostPreview(candidateId) {
+  const c = state.candidates.find((x) => x.id === candidateId);
+  if (!c) return;
+  if (!c.sourceUrl) {
+    toast("No source URL to preview", "warn");
+    return;
+  }
+
+  // Convert /p/ABC123/ to /p/ABC123/embed/ for the iframe.
+  const embedUrl = c.sourceUrl.replace(/\/?$/, "/") + "embed/";
+
+  const overlay = document.createElement("div");
+  overlay.className = "preview-overlay";
+  overlay.innerHTML = `
+    <div class="preview" role="dialog" aria-modal="true">
+      <div class="preview-header">
+        <h3>Preview</h3>
+        <button class="modal-close" aria-label="Close">×</button>
+      </div>
+
+      <div class="preview-body">
+        <iframe
+          src="${esc(embedUrl)}"
+          width="540"
+          height="680"
+          loading="lazy"
+          allowtransparency="true"
+          allowfullscreen
+          scrolling="no"
+          frameborder="0"
+          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+          referrerpolicy="strict-origin-when-cross-origin"
+        ></iframe>
+      </div>
+
+      <div class="preview-footer">
+        <span class="preview-meta">Live from instagram.com</span>
+        <a href="${esc(c.sourceUrl)}" target="_blank" rel="noopener">
+          Open on Instagram ↗
+        </a>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("show"));
+
+  const close = () => {
+    overlay.classList.remove("show");
+    setTimeout(() => overlay.remove(), 220);
+  };
+
+  overlay.querySelector(".modal-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+
+  const onEsc = (e) => {
+    if (e.key === "Escape") { close(); document.removeEventListener("keydown", onEsc); }
+  };
+  document.addEventListener("keydown", onEsc);
+}
+
 // ============ 8. Media editor modal ============
 
 function openMediaEditor(candidateId) {
@@ -820,12 +979,18 @@ function openMediaEditor(candidateId) {
         <h3>Edit media</h3>
         <button class="modal-close" aria-label="Close">×</button>
       </div>
-      <div class="modal-body">
+      <      <div class="modal-body">
         <div class="field">
           <label for="edit-image">Image URL</label>
           <input id="edit-image" type="text"
                  placeholder="https://…/image.jpg"
                  value="${esc(c.imageUrl || "")}" />
+        </div>
+        <div class="field">
+          <label for="edit-video">Video URL <span class="hint">for Reels</span></label>
+          <input id="edit-video" type="text"
+                 placeholder="https://…/video.mp4"
+                 value="${esc(c.videoUrl || "")}" />
         </div>
         <div class="field-row">
           <div class="field">
@@ -853,6 +1018,14 @@ function openMediaEditor(candidateId) {
   requestAnimationFrame(() => overlay.classList.add("show"));
   setTimeout(() => overlay.querySelector("#edit-image").focus(), 40);
 
+  overlay.querySelector("#edit-video").addEventListener("paste", (e) => {
+    const text = e.clipboardData.getData("text");
+    if (text && /^https?:\/\//i.test(text.trim())) {
+      e.preventDefault();
+      overlay.querySelector("#edit-video").value = text.trim();
+    }
+  });
+
   // Paste a URL directly into the image field.
   overlay.querySelector("#edit-image").addEventListener("paste", (e) => {
     const text = e.clipboardData.getData("text");
@@ -874,6 +1047,7 @@ function openMediaEditor(candidateId) {
   overlay.querySelector("[data-modal-save]").addEventListener("click", async (e) => {
     const payload = {
       imageUrl: overlay.querySelector("#edit-image").value.trim() || null,
+      videoUrl: overlay.querySelector("#edit-video").value.trim() || null,
       musicTitle: overlay.querySelector("#edit-music-title").value.trim() || null,
       musicArtist: overlay.querySelector("#edit-music-artist").value.trim() || null
     };
